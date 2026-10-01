@@ -3,6 +3,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import type {
   ApiResponse,
+  AdmissionEnquiry,
+  AttendanceRecord,
+  FeeInvoice,
+  FeePayment,
+  FeeReconciliation,
+  FeeStructure,
   Notice,
   PlatformAnalytics,
   PlatformPlan,
@@ -11,8 +17,12 @@ import type {
   PlatformSetting,
   PlatformSubscription,
   PlatformUserDetails,
+  SchoolEvent,
   School,
   Student,
+  StaffRecord,
+  TeacherAssignment,
+  TransportRoute,
   User,
 } from "../types";
 
@@ -29,6 +39,8 @@ export const KEYS = {
   refresh: "erp_refresh_token",
   user: "erp_user",
   school: "erp_school",
+  role: "erp_user_role",
+  activeSchoolId: "erp_active_school_id",
 };
 
 let onLogout: (() => void) | null = null;
@@ -70,24 +82,16 @@ async function request<T>(
   path: string,
   options: RequestInit & { _retry?: boolean } = {},
 ): Promise<ApiResponse<T>> {
-  const [[, token], [, userValue], [, schoolValue]] =
-    await AsyncStorage.multiGet([KEYS.access, KEYS.user, KEYS.school]);
+  const [[, token], [, role], [, activeSchoolId]] = await AsyncStorage.multiGet(
+    [KEYS.access, KEYS.role, KEYS.activeSchoolId],
+  );
   let schoolHeader: Record<string, string> = {};
-  let user: User | null = null;
-  let schoolId: string | undefined;
-  try {
-    user = userValue ? JSON.parse(userValue) : null;
-    const school = schoolValue ? JSON.parse(schoolValue) : null;
-    schoolId = school?.id || school?._id;
-    if (user?.role === "super_admin" && schoolId) {
-      schoolHeader = { "X-School-Id": String(schoolId) };
-    }
-  } catch {
-    // Ignore malformed cached context; the server will reject missing tenant context.
+  if (role === "super_admin" && activeSchoolId) {
+    schoolHeader = { "X-School-Id": activeSchoolId };
   }
   if (
-    user?.role === "super_admin" &&
-    !schoolId &&
+    role === "super_admin" &&
+    !activeSchoolId &&
     !path.startsWith("/auth/") &&
     !path.startsWith("/platform/")
   ) {
@@ -169,11 +173,71 @@ export const api = {
     stats: () =>
       request<{ total: number; active: number }>("/students/stats/summary"),
   },
+  fees: {
+    structures: {
+      list: (query = "") =>
+        request<FeeStructure[]>(`/fees/structure${query ? `?${query}` : ""}`),
+      create: (payload: Partial<FeeStructure>) =>
+        send<FeeStructure>("/fees/structure", "POST", payload),
+    },
+    invoices: {
+      list: (query = "") =>
+        request<FeeInvoice[]>(`/fees${query ? `?${query}` : ""}`),
+    },
+    payments: {
+      list: (query = "") =>
+        request<FeePayment[]>(`/payments${query ? `?${query}` : ""}`),
+      create: (payload: {
+        invoiceId: string;
+        amount: number;
+        mode: string;
+        transactionId?: string;
+        chequeNo?: string;
+        chequeDate?: string;
+        bankName?: string;
+      }) => send<FeePayment>("/payments", "POST", payload),
+    },
+    reports: {
+      reconciliation: (query = "") =>
+        request<FeeReconciliation>(
+          `/payments/reconciliation${query ? `?${query}` : ""}`,
+        ),
+    },
+  },
+  admissions: {
+    list: (query = "") =>
+      request<AdmissionEnquiry[]>(`/admissions${query ? `?${query}` : ""}`),
+    create: (payload: Partial<AdmissionEnquiry>) =>
+      send<AdmissionEnquiry>("/admissions", "POST", payload),
+    update: (id: string, payload: Partial<AdmissionEnquiry>) =>
+      send<AdmissionEnquiry>(`/admissions/${id}`, "PUT", payload),
+    remove: (id: string) => send(`/admissions/${id}`, "DELETE"),
+  },
   notices: { list: () => request<Notice[]>("/notices") },
   attendance: {
-    list: (p?: string) => request<{ status: string }[]>(`/attendance${q(p)}`),
+    list: (p?: string) => request<AttendanceRecord[]>(`/attendance${q(p)}`),
   },
-  staff: { list: () => request<unknown[]>("/staff") },
+  staff: {
+    list: (query = "") =>
+      request<StaffRecord[]>(`/staff${query ? `?${query}` : ""}`),
+    create: (payload: Partial<StaffRecord>) =>
+      send<StaffRecord>("/staff", "POST", payload),
+    attendance: {
+      list: (query = "") =>
+        request<AttendanceRecord[]>(
+          `/staff/attendance${query ? `?${query}` : ""}`,
+        ),
+    },
+  },
+  assignments: {
+    list: (query = "") =>
+      request<TeacherAssignment[]>(`/assignments${query ? `?${query}` : ""}`),
+  },
+  transport: {
+    list: (query = "") =>
+      request<TransportRoute[]>(`/transport${query ? `?${query}` : ""}`),
+  },
+  events: { list: () => request<SchoolEvent[]>("/events") },
   schools: { list: () => request<School[]>("/auth/schools") },
   plans: {
     list: (query = "") =>

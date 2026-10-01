@@ -1,3 +1,4 @@
+import AdmissionEnquiryScreen from "./src/screens/AdmissionEnquiryScreen";
 import React, { useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -37,6 +38,8 @@ import {
 import BusTrackingScreen from "./src/screens/BusTrackingScreen";
 import IdCardScreen from "./src/screens/IdCardScreen";
 import UploadDocumentScreen from "./src/screens/UploadDocumentScreen";
+import StaffScreen from "./src/screens/StaffScreen";
+import FeesCollectionScreen from "./src/screens/FeesCollectionScreen";
 import { colors } from "./src/theme";
 
 export type RootStackParams = {
@@ -47,6 +50,7 @@ export type RootStackParams = {
   Reports: undefined;
   PlatformSettings: undefined;
   SchoolOnboarding: undefined;
+  AdmissionEnquiry: undefined;
   Detail: { title: string; row: Record<string, unknown>; endpoint?: string };
   Form: { form: string; initial?: Record<string, string> };
   Edit: { endpoint: string; row: Record<string, unknown> };
@@ -57,6 +61,8 @@ export type RootStackParams = {
   IdCard: undefined;
   UploadDocument: undefined;
   MarkAttendance: undefined;
+  Staff: undefined;
+  FeesCollection: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -65,6 +71,8 @@ const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   Dashboard: "grid",
   Schools: "business",
   Users: "people-circle",
+  "Admission Enquiry": "person-add",
+  Staff: "people",
   Students: "people",
   Notices: "megaphone",
   Alerts: "notifications",
@@ -99,7 +107,9 @@ function PlatformTabs() {
 
 function SchoolTabs() {
   const { can } = useAuth();
+  const { user } = useAuth();
   const { unread } = useNotifications();
+  const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -112,10 +122,29 @@ function SchoolTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      {can("students:read") && (
-        <Tab.Screen name="Students" component={StudentsScreen} />
+      {isSchoolAdmin ? (
+        can("admissions:read") && (
+          <Tab.Screen
+            name="Admission Enquiry"
+            component={AdmissionEnquiryScreen}
+            options={{ title: "Admissions" }}
+          />
+        )
+      ) : (
+        <>
+          {can("students:read") && (
+            <Tab.Screen name="Students" component={StudentsScreen} />
+          )}
+          <Tab.Screen name="Notices" component={NoticesScreen} />
+        </>
       )}
-      <Tab.Screen name="Notices" component={NoticesScreen} />
+      {isSchoolAdmin && can("staff:read") && (
+        <Tab.Screen
+          name="Staff"
+          component={StaffScreen}
+          options={{ title: "Teachers" }}
+        />
+      )}
       <Tab.Screen
         name="Alerts"
         component={NotificationsScreen}
@@ -159,6 +188,21 @@ function Root() {
         name="SchoolOnboarding"
         component={SchoolOnboardingScreen}
         options={{ title: "School Onboarding" }}
+      />
+      <Stack.Screen
+        name="AdmissionEnquiry"
+        component={AdmissionEnquiryScreen}
+        options={{ title: "Admission Enquiry" }}
+      />
+      <Stack.Screen
+        name="Staff"
+        component={StaffScreen}
+        options={{ title: "Staff Directory" }}
+      />
+      <Stack.Screen
+        name="FeesCollection"
+        component={FeesCollectionScreen}
+        options={{ title: "Fees Collection" }}
       />
       <Stack.Screen
         name="Plans"

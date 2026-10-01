@@ -151,6 +151,111 @@ export interface Student {
   admissionNo?: string;
   status?: string;
 }
+export interface AttendanceRecord {
+  _id?: string;
+  studentId?: string;
+  staffId?: string;
+  date?: string;
+  status: string;
+}
+export interface FeeInvoice {
+  _id: string;
+  studentId?: string;
+  class?: string;
+  section?: string;
+  feeType?: string;
+  amount?: number;
+  paidAmount?: number;
+  dueDate?: string;
+  status?: string;
+  session?: string;
+}
+export interface FeeStructure {
+  _id: string;
+  class?: string;
+  feeType?: string;
+  session?: string;
+  amount?: number;
+  frequency?: string;
+  dueDate?: string;
+  active?: boolean;
+}
+export interface FeePayment {
+  _id?: string;
+  receiptNo?: string;
+  studentId?: string;
+  invoiceId?: string;
+  amount?: number;
+  transactionId?: string;
+  collectedBy?: string;
+  clearanceStatus?: string;
+  paidOn?: string;
+  mode?: string;
+}
+export interface FeeReconciliation {
+  totalRecorded?: number;
+  bouncedAmount?: number;
+  pendingChequeAmount?: number;
+  netCollected?: number;
+}
+export interface AdmissionEnquiry {
+  _id: string;
+  childName?: string;
+  classApplied?: string;
+  parentName?: string;
+  section?: string;
+  contact?: string;
+  email?: string;
+  source?: string;
+  status?: string;
+  admissionNo?: string;
+  followUpDate?: string;
+  notes?: string;
+  createdAt?: string;
+}
+export interface TransportRoute {
+  _id: string;
+  routeNo?: string;
+  stops?: unknown[];
+  assignedStudents?: unknown[];
+  currentLocation?: { lat?: number; lng?: number; updatedAt?: string } | null;
+}
+export interface SchoolEvent {
+  _id: string;
+  title: string;
+  date?: string;
+  venue?: string;
+  category?: string;
+}
+export interface StaffRecord {
+  _id: string;
+  employeeId?: string;
+  name?: string;
+  designation?: string;
+  department?: string;
+  role?: string;
+  userId?: string | null;
+  subjects?: string[];
+  qualification?: string;
+  joiningDate?: string;
+  dob?: string;
+  gender?: "Male" | "Female" | "Other";
+  salary?: number;
+  contact?: string;
+  email?: string;
+  address?: string;
+  photoUrl?: string;
+  idCardNumber?: string | null;
+  idCardIssuedAt?: string | null;
+  status?: "Active" | "Inactive" | "Resigned";
+  profileStatus?: "complete" | "incomplete";
+}
+export interface TeacherAssignment {
+  _id: string;
+  staffId: string;
+  type: "teaching" | "class_teacher";
+  status: "active" | "ended";
+}
 export interface Notice {
   _id: string;
   title: string;

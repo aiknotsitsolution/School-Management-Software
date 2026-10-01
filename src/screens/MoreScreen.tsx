@@ -12,6 +12,7 @@ export default function MoreScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const { user, can } = useAuth();
   const isSuper = user?.role === "super_admin";
+  const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.paper }}
@@ -25,10 +26,39 @@ export default function MoreScreen() {
           can("attendance:mark") ||
           can("students:write") ||
           can("marks:write") ||
+          (isSchoolAdmin && can("staff:read")) ||
+          (isSchoolAdmin && can("fees:read")) ||
           can("enquiries:write")) && (
           <View>
             <Text style={s.group}>Quick actions</Text>
             <View style={s.grid}>
+              {isSchoolAdmin && can("staff:read") && (
+                <Pressable style={s.tile} onPress={() => nav.navigate("Staff")}>
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="people"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Teachers & Staff</Text>
+                </Pressable>
+              )}
+              {isSchoolAdmin && can("fees:read") && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("FeesCollection")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="wallet"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Fees Collection</Text>
+                </Pressable>
+              )}
               {can("transport:read") && (
                 <Pressable
                   style={s.tile}
@@ -201,18 +231,20 @@ export default function MoreScreen() {
                   key={i.key}
                   style={s.tile}
                   onPress={() =>
-                    i.key === "p-plans"
-                      ? nav.navigate("Plans")
-                      : i.key === "p-subs"
-                        ? nav.navigate("Subscriptions")
-                        : i.key === "p-reports"
-                          ? nav.navigate("Reports")
-                          : i.key === "p-settings"
-                            ? nav.navigate("PlatformSettings")
-                            : nav.navigate("Module", {
-                                title: i.title,
-                                endpoint: i.endpoint,
-                              })
+                    i.key === "admissions"
+                      ? nav.navigate("AdmissionEnquiry")
+                      : i.key === "p-plans"
+                        ? nav.navigate("Plans")
+                        : i.key === "p-subs"
+                          ? nav.navigate("Subscriptions")
+                          : i.key === "p-reports"
+                            ? nav.navigate("Reports")
+                            : i.key === "p-settings"
+                              ? nav.navigate("PlatformSettings")
+                              : nav.navigate("Module", {
+                                  title: i.title,
+                                  endpoint: i.endpoint,
+                                })
                   }
                 >
                   <View style={s.icon}>

@@ -14,14 +14,15 @@ import { colors } from "../theme";
 import type { Notice } from "../types";
 import { TrendChart, Point } from "../components/Charts";
 import PlatformDashboardScreen from "./PlatformDashboardScreen";
+import SchoolAdminDashboardScreen from "./SchoolAdminDashboardScreen";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
-  return user?.role === "super_admin" ? (
-    <PlatformDashboardScreen />
-  ) : (
-    <SchoolDashboardScreen />
-  );
+  if (user?.role === "super_admin") return <PlatformDashboardScreen />;
+  if (user?.role === "school_admin" || user?.role === "admin") {
+    return <SchoolAdminDashboardScreen />;
+  }
+  return <SchoolDashboardScreen />;
 }
 
 function SchoolDashboardScreen() {
