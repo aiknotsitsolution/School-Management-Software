@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Zipschool OS",
+    "slug": "zipschool-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {},
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Zipschool OS to access your photos for profile pictures and documents.",
+          "cameraPermission": "Allow Zipschool OS to use the camera to take photos."
+        }
+      ]
+    ]
+  }
+}
