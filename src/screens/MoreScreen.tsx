@@ -67,7 +67,7 @@ export default function MoreScreen() {
                   <View style={s.icon}>
                     <Ionicons name="map" size={22} color={colors.amberDark} />
                   </View>
-                  <Text style={s.label}>Bus Map</Text>
+                  <Text style={s.label}>Bus Tracking</Text>
                 </Pressable>
               )}
               {(can("students:read") || user?.role === "student") && (
@@ -85,7 +85,7 @@ export default function MoreScreen() {
                   <Text style={s.label}>ID Card</Text>
                 </Pressable>
               )}
-              {can("timetable:read") && (
+              {can("timetable:read") && !isSchoolAdmin && (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("Timetable")}
@@ -241,6 +241,21 @@ export default function MoreScreen() {
               </View>
               <Text style={s.label}>Subscription</Text>
             </Pressable>
+            {can("timetable:read") ? (
+              <Pressable
+                style={s.tile}
+                onPress={() => nav.navigate("Timetable")}
+              >
+                <View style={s.icon}>
+                  <Ionicons
+                    name="calendar"
+                    size={22}
+                    color={colors.amberDark}
+                  />
+                </View>
+                <Text style={s.label}>Timetable</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       ) : null}

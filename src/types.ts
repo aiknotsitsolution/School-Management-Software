@@ -51,6 +51,7 @@ export interface School {
   code?: string;
   email?: string;
   phone?: string;
+  location?: { lat?: number; lng?: number };
   address?: string;
   website?: string;
   domain?: string;
@@ -185,6 +186,27 @@ export interface SchoolSubscriptionUsage {
   adminUsers?: number;
   total?: number;
 }
+export interface TimetableSubstitution {
+  _id: string;
+  date: string;
+  day: string;
+  class: string;
+  section: string;
+  startTime: string;
+  endTime: string;
+  subject?: string;
+  originalTeacherId?: string;
+  originalTeacherName?: string;
+  substituteTeacherId?: string;
+  substituteTeacherName?: string;
+  roomId?: string;
+  roomName?: string;
+  reason?: string;
+  status: "scheduled" | "completed" | "cancelled";
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 export interface PlatformReportDefinition {
   id: string;
   title: string;
@@ -282,12 +304,22 @@ export interface AdmissionEnquiry {
   notes?: string;
   createdAt?: string;
 }
+export interface TransportStop {
+  name?: string;
+}
 export interface TransportRoute {
   _id: string;
   routeNo?: string;
-  stops?: unknown[];
+  vehicleNo?: string;
+  driverName?: string;
+  driverContact?: string;
+  stops?: (TransportStop | string)[];
   assignedStudents?: unknown[];
-  currentLocation?: { lat?: number; lng?: number; updatedAt?: string } | null;
+  currentLocation?: {
+    lat?: number | string;
+    lng?: number | string;
+    updatedAt?: string;
+  } | null;
 }
 export interface SchoolEvent {
   _id: string;

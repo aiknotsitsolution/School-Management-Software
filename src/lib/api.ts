@@ -25,6 +25,7 @@ import type {
   Student,
   StaffRecord,
   TeacherAssignment,
+  TimetableSubstitution,
   TransportRoute,
   User,
 } from "../types";
@@ -241,6 +242,48 @@ export const api = {
   notices: { list: () => request<Notice[]>("/notices") },
   attendance: {
     list: (p?: string) => request<AttendanceRecord[]>(`/attendance${q(p)}`),
+  },
+  timetable: {
+    list: (query = "") =>
+      request<Record<string, unknown>[]>(
+        `/timetable${query ? `?${query}` : ""}`,
+      ),
+    save: (payload: Record<string, unknown>) =>
+      send<Record<string, unknown>>("/timetable", "POST", payload),
+    remove: (id: string) =>
+      send(`/timetable/${encodeURIComponent(id)}`, "DELETE"),
+    substitutions: {
+      list: (query = "") =>
+        request<TimetableSubstitution[]>(
+          `/timetable/substitutions${query ? `?${query}` : ""}`,
+        ),
+      create: (payload: {
+        date: string;
+        class: string;
+        section: string;
+        startTime: string;
+        endTime: string;
+        substituteTeacherId: string;
+        substituteTeacherName: string;
+        reason?: string;
+      }) =>
+        send<TimetableSubstitution>(
+          "/timetable/substitutions",
+          "POST",
+          payload,
+        ),
+      setStatus: (
+        id: string,
+        status: "completed" | "cancelled",
+      ) =>
+        send<TimetableSubstitution>(
+          `/timetable/substitutions/${encodeURIComponent(id)}/status`,
+          "PATCH",
+          { status },
+        ),
+      remove: (id: string) =>
+        send(`/timetable/substitutions/${encodeURIComponent(id)}`, "DELETE"),
+    },
   },
   staff: {
     list: (query = "") =>

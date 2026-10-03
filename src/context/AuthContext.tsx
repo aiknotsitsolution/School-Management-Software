@@ -34,6 +34,7 @@ function schoolSummary(value: School | null | undefined): School | null {
     code: value.code,
     email: value.email,
     phone: value.phone,
+    location: value.location,
     address: value.address,
     website: value.website,
     domain: value.domain,
