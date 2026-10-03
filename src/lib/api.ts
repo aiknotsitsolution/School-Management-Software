@@ -19,6 +19,9 @@ import type {
   PlatformUserDetails,
   SchoolEvent,
   School,
+  SchoolSubscription,
+  SchoolSubscriptionInvoice,
+  SchoolSubscriptionUsage,
   Student,
   StaffRecord,
   TeacherAssignment,
@@ -28,7 +31,7 @@ import type {
 
 const localApiUrl =
   Platform.OS === "android"
-    ? "http://192.168.1.21:5000/api"
+    ? "http://192.168.1.61:5000/api"
     : "http://localhost:5000/api";
 export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
@@ -172,6 +175,28 @@ export const api = {
     list: (p?: string) => request<Student[]>(`/students${q(p)}`),
     stats: () =>
       request<{ total: number; active: number }>("/students/stats/summary"),
+    pendingRegistrations: (p?: string) =>
+      request<Record<string, unknown>[]>(`/students/pending-registrations${q(p)}`),
+  },
+  users: {
+    list: (p?: string) => request<User[]>(`/auth/users${q(p)}`),
+    create: (payload: Record<string, unknown>) =>
+      send<User>("/auth/users", "POST", payload),
+    update: (id: string, payload: Partial<User>) =>
+      send<User>(`/auth/users/${encodeURIComponent(id)}`, "PATCH", payload),
+    setStatus: (id: string, isActive: boolean) =>
+      send<User>(`/auth/users/${encodeURIComponent(id)}/status`, "PATCH", {
+        isActive,
+      }),
+    remove: (id: string) =>
+      send(`/auth/users/${encodeURIComponent(id)}`, "DELETE"),
+    restore: (id: string) =>
+      send(`/auth/users/${encodeURIComponent(id)}/restore`, "POST"),
+    sendResetOtp: (id: string) =>
+      send<{ maskedEmail?: string }>(
+        `/auth/users/${encodeURIComponent(id)}/send-reset-otp`,
+        "POST",
+      ),
   },
   fees: {
     structures: {
@@ -220,6 +245,10 @@ export const api = {
   staff: {
     list: (query = "") =>
       request<StaffRecord[]>(`/staff${query ? `?${query}` : ""}`),
+    pendingRegistrations: (query = "") =>
+      request<Record<string, unknown>[]>(
+        `/staff/pending-registrations${query ? `?${query}` : ""}`,
+      ),
     create: (payload: Partial<StaffRecord>) =>
       send<StaffRecord>("/staff", "POST", payload),
     attendance: {
@@ -242,6 +271,38 @@ export const api = {
   plans: {
     list: (query = "") =>
       request<PlatformPlan[]>(`/platform/plans${query ? `?${query}` : ""}`),
+  },
+  schoolSubscription: {
+    me: () => request<SchoolSubscription | null>("/auth/school/me/subscription"),
+    scheduled: () =>
+      request<SchoolSubscription | null>(
+        "/auth/school/me/subscription/scheduled",
+      ),
+    plans: () => request<PlatformPlan[]>("/auth/school/me/plans"),
+    usage: () => request<SchoolSubscriptionUsage>("/auth/school/me/usage"),
+    upgrade: (
+      planId: string,
+      durationPeriods = 1,
+      switchMode: "immediate" | "advance" = "immediate",
+    ) =>
+      send<SchoolSubscription | { requiresPayment: true; [key: string]: unknown }>(
+        "/auth/school/me/upgrade",
+        "POST",
+        { planId, durationPeriods, switchMode },
+      ),
+  },
+  schoolSubscriptionInvoices: {
+    list: (query = "") =>
+      request<{
+        invoices: SchoolSubscriptionInvoice[];
+        total: number;
+        page: number;
+        pages: number;
+      }>(`/auth/school/me/invoices${query ? `?${query}` : ""}`),
+    get: (id: string) =>
+      request<SchoolSubscriptionInvoice>(
+        `/auth/school/me/invoices/${encodeURIComponent(id)}`,
+      ),
   },
   platform: {
     settings: {
@@ -299,6 +360,39 @@ export const api = {
     },
     assignSubscription: (schoolId: string, planId: string) =>
       send("/platform/subscriptions", "POST", { schoolId, planId }),
+  },
+  school: {
+    me: () => request<School>("/auth/school/me"),
+    update: (payload: Record<string, unknown>) =>
+      send<School>("/auth/school/me", "PATCH", payload),
+  },
+  examMasters: {
+    list: (kind: string) =>
+      request<Record<string, unknown>[]>(`/exam-masters/${encodeURIComponent(kind)}`),
+    create: (kind: string, payload: Record<string, unknown>) =>
+      send<Record<string, unknown>>(
+        `/exam-masters/${encodeURIComponent(kind)}`,
+        "POST",
+        payload,
+      ),
+    update: (kind: string, id: string, payload: Record<string, unknown>) =>
+      send<Record<string, unknown>>(
+        `/exam-masters/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
+        "PATCH",
+        payload,
+      ),
+    deactivate: (kind: string, id: string) =>
+      send<Record<string, unknown>>(
+        `/exam-masters/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/deactivate`,
+        "PATCH",
+        { active: false },
+      ),
+    restore: (kind: string, id: string) =>
+      send<Record<string, unknown>>(
+        `/exam-masters/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/restore`,
+        "PATCH",
+        {},
+      ),
   },
   createSchool: (school: Record<string, unknown>) =>
     send<School>("/auth/schools", "POST", school),

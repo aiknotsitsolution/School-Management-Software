@@ -25,9 +25,13 @@ import ModuleListScreen from "./src/screens/ModuleListScreen";
 import ModuleDetailScreen from "./src/screens/ModuleDetailScreen";
 import FormScreen from "./src/screens/FormScreen";
 import MarkAttendanceScreen from "./src/screens/MarkAttendanceScreen";
+import ExaminationScreen from "./src/screens/ExaminationScreen";
 import EditRecordScreen from "./src/screens/EditRecordScreen";
 import MarksEntryScreen from "./src/screens/MarksEntryScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
+import UsersAccessScreen from "./src/screens/UsersAccessScreen";
+import ManageSchoolScreen from "./src/screens/ManageSchoolScreen";
+import SubscriptionScreen from "./src/screens/SubscriptionScreen";
 import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
 import TimetableScreen from "./src/screens/TimetableScreen";
 import ReportCardScreen from "./src/screens/ReportCardScreen";
@@ -61,8 +65,11 @@ export type RootStackParams = {
   IdCard: undefined;
   UploadDocument: undefined;
   MarkAttendance: undefined;
+  Examination: undefined;
   Staff: undefined;
   FeesCollection: undefined;
+  ManageSchool: undefined;
+  Subscription: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -76,6 +83,7 @@ const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   Students: "people",
   Notices: "megaphone",
   Alerts: "notifications",
+  "Users & Access": "people",
   More: "apps",
   Profile: "person",
 };
@@ -145,11 +153,19 @@ function SchoolTabs() {
           options={{ title: "Teachers" }}
         />
       )}
-      <Tab.Screen
-        name="Alerts"
-        component={NotificationsScreen}
-        options={{ tabBarBadge: unread > 0 ? unread : undefined }}
-      />
+      {isSchoolAdmin && can("users:manage") ? (
+        <Tab.Screen
+          name="Users & Access"
+          component={UsersAccessScreen}
+          options={{ title: "Users & Access" }}
+        />
+      ) : (
+        <Tab.Screen
+          name="Alerts"
+          component={NotificationsScreen}
+          options={{ tabBarBadge: unread > 0 ? unread : undefined }}
+        />
+      )}
       <Tab.Screen name="More" component={MoreScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
@@ -205,6 +221,16 @@ function Root() {
         options={{ title: "Fees Collection" }}
       />
       <Stack.Screen
+        name="ManageSchool"
+        component={ManageSchoolScreen}
+        options={{ title: "Manage School" }}
+      />
+      <Stack.Screen
+        name="Subscription"
+        component={SubscriptionScreen}
+        options={{ title: "Subscription & Upgrade" }}
+      />
+      <Stack.Screen
         name="Plans"
         component={PlatformPlansScreen}
         options={{ title: "Plans & Pricing" }}
@@ -256,7 +282,12 @@ function Root() {
       <Stack.Screen
         name="MarkAttendance"
         component={MarkAttendanceScreen}
-        options={{ title: "Mark Attendance" }}
+        options={{ title: "Attendance" }}
+      />
+      <Stack.Screen
+        name="Examination"
+        component={ExaminationScreen}
+        options={{ title: "Examination" }}
       />
     </Stack.Navigator>
   );

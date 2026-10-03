@@ -215,6 +215,35 @@ export default function MoreScreen() {
             </View>
           </View>
         )}
+      {isSchoolAdmin && can("school:settings") ? (
+        <View>
+          <Text style={s.group}>School administration</Text>
+          <View style={s.grid}>
+            <Pressable
+              style={s.tile}
+              onPress={() => nav.navigate("ManageSchool")}
+            >
+              <View style={s.icon}>
+                <Ionicons name="settings" size={22} color={colors.amberDark} />
+              </View>
+              <Text style={s.label}>Manage School</Text>
+            </Pressable>
+            <Pressable
+              style={s.tile}
+              onPress={() => nav.navigate("Subscription")}
+            >
+              <View style={s.icon}>
+                <Ionicons
+                  name="card-outline"
+                  size={22}
+                  color={colors.amberDark}
+                />
+              </View>
+              <Text style={s.label}>Subscription</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       {MODULE_GROUPS.map((g) => {
         const items = g.items.filter((i) =>
           isSuper
@@ -230,22 +259,28 @@ export default function MoreScreen() {
                 <Pressable
                   key={i.key}
                   style={s.tile}
-                  onPress={() =>
-                    i.key === "admissions"
-                      ? nav.navigate("AdmissionEnquiry")
-                      : i.key === "p-plans"
-                        ? nav.navigate("Plans")
-                        : i.key === "p-subs"
-                          ? nav.navigate("Subscriptions")
-                          : i.key === "p-reports"
-                            ? nav.navigate("Reports")
-                            : i.key === "p-settings"
-                              ? nav.navigate("PlatformSettings")
-                              : nav.navigate("Module", {
-                                  title: i.title,
-                                  endpoint: i.endpoint,
-                                })
-                  }
+                  onPress={() => {
+                    if (i.key === "attendance" && isSchoolAdmin) {
+                      nav.navigate("MarkAttendance");
+                    } else if (i.key === "exams" && isSchoolAdmin) {
+                      nav.navigate("Examination");
+                    } else if (i.key === "admissions") {
+                      nav.navigate("AdmissionEnquiry");
+                    } else if (i.key === "p-plans") {
+                      nav.navigate("Plans");
+                    } else if (i.key === "p-subs") {
+                      nav.navigate("Subscriptions");
+                    } else if (i.key === "p-reports") {
+                      nav.navigate("Reports");
+                    } else if (i.key === "p-settings") {
+                      nav.navigate("PlatformSettings");
+                    } else {
+                      nav.navigate("Module", {
+                        title: i.title,
+                        endpoint: i.endpoint,
+                      });
+                    }
+                  }}
                 >
                   <View style={s.icon}>
                     <Ionicons

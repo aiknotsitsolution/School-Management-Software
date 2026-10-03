@@ -49,14 +49,36 @@ export interface School {
   name?: string;
   shortName?: string;
   code?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  website?: string;
+  domain?: string;
   plan?: string;
   status?: string;
   city?: string;
+  state?: string;
+  pincode?: string;
+  board?: string;
+  recognitionNumber?: string;
+  recognitionAuthority?: string;
+  recognitionVerified?: boolean;
+  recognitionVerifiedAt?: string;
+  logo?: string;
+  settings?: { bannerImage?: string; [key: string]: unknown };
   createdAt?: string;
+  updatedAt?: string;
   isDeleted?: boolean;
-  onboarding?: { status?: string };
+  deletedAt?: string | null;
+  academicConfigConfirmed?: boolean;
+  onboarding?: {
+    status?: string;
+    appliedAt?: string;
+    completedAt?: string;
+    notes?: string;
+  };
   session?: string;
-  currentSession?: { name: string };
+  currentSession?: { name: string; startDate?: string; endDate?: string };
 }
 export interface PlatformPlan {
   _id: string;
@@ -115,6 +137,53 @@ export interface PlatformSubscription {
     periodEnd?: string;
   }[];
   history?: PlatformSubscription[];
+}
+export interface SchoolSubscription {
+  _id: string;
+  plan?: PlatformPlan | null;
+  status: string;
+  startDate?: string;
+  trialStartDate?: string;
+  trialEndDate?: string;
+  currentPeriodStart?: string;
+  currentPeriodEnd?: string;
+  nextBillingDate?: string;
+  cancelledAt?: string;
+  suspendedAt?: string;
+  endedAt?: string;
+  billingCycle?: string;
+  price?: number;
+  currency?: string;
+  durationPeriods?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+export interface SchoolSubscriptionInvoice {
+  _id: string;
+  invoiceNumber?: string;
+  amount?: number;
+  currency?: string;
+  taxAmount?: number;
+  totalAmount?: number;
+  gstRate?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  status?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  dueDate?: string;
+  paidAt?: string;
+  planName?: string;
+  planCode?: string;
+  durationPeriods?: number;
+  createdAt?: string;
+}
+export interface SchoolSubscriptionUsage {
+  students?: number;
+  teachers?: number;
+  staff?: number;
+  adminUsers?: number;
+  total?: number;
 }
 export interface PlatformReportDefinition {
   id: string;

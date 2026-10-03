@@ -32,17 +32,43 @@ function schoolSummary(value: School | null | undefined): School | null {
     name: value.name,
     shortName: value.shortName,
     code: value.code,
+    email: value.email,
+    phone: value.phone,
+    address: value.address,
+    website: value.website,
+    domain: value.domain,
     plan: value.plan,
     status: value.status,
     city: value.city,
+    state: value.state,
+    pincode: value.pincode,
+    board: value.board,
+    recognitionNumber: value.recognitionNumber,
+    recognitionAuthority: value.recognitionAuthority,
+    recognitionVerified: value.recognitionVerified,
+    recognitionVerifiedAt: value.recognitionVerifiedAt,
+    logo: value.logo,
+    settings: value.settings,
     createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
     isDeleted: value.isDeleted,
+    deletedAt: value.deletedAt,
+    academicConfigConfirmed: value.academicConfigConfirmed,
     onboarding: value.onboarding
-      ? { status: value.onboarding.status }
+      ? {
+          status: value.onboarding.status,
+          appliedAt: value.onboarding.appliedAt,
+          completedAt: value.onboarding.completedAt,
+          notes: value.onboarding.notes,
+        }
       : undefined,
     session: value.session,
     currentSession: value.currentSession
-      ? { name: value.currentSession.name }
+      ? {
+          name: value.currentSession.name,
+          startDate: value.currentSession.startDate,
+          endDate: value.currentSession.endDate,
+        }
       : undefined,
   };
 }
