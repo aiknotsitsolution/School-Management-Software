@@ -325,9 +325,14 @@ export interface TransportRoute {
 export interface SchoolEvent {
   _id: string;
   title: string;
+  description?: string;
   date?: string;
+  time?: string;
   venue?: string;
   category?: string;
+  image?: string;
+  audience?: string[];
+  createdAt?: string;
 }
 export interface StaffRecord {
   _id: string;
@@ -362,10 +367,66 @@ export interface Notice {
   _id: string;
   title: string;
   body: string;
+  description?: string;
   category?: string;
   audience?: string[];
+  classTags?: string[];
+  expiryDate?: string;
   pinned?: boolean;
+  priority?: "normal" | "emergency" | string;
   createdAt?: string;
+}
+export interface ConversationParticipant {
+  userId: string;
+  name: string;
+  role: Role | string;
+  lastReadAt?: string | null;
+}
+export interface ConversationMessage {
+  _id?: string;
+  senderId: string;
+  senderName?: string;
+  senderRole?: Role | string;
+  body: string;
+  at?: string;
+}
+export interface Conversation {
+  _id: string;
+  participants?: ConversationParticipant[];
+  messages?: ConversationMessage[];
+  with?: { userId?: string | null; name?: string; role?: Role | string };
+  lastMessage?: string;
+  lastMessageAt?: string;
+  lastSenderId?: string;
+  unread?: number;
+}
+export interface ConversationPerson {
+  _id: string;
+  name: string;
+  role: Role | string;
+  designation?: string;
+  email?: string;
+}
+export interface BroadcastLog {
+  _id: string;
+  channel: "sms" | "email" | string;
+  subject?: string | null;
+  body?: string;
+  recipients?: string[];
+  sent?: number;
+  failed?: number;
+  skipped?: number;
+  dryRun?: boolean;
+  status?: "sent" | "partial" | "failed" | "dry_run" | string;
+  createdAt?: string;
+}
+export interface BroadcastResult {
+  recipients: number;
+  sent: number;
+  failed: number;
+  skipped?: number;
+  dryRun?: boolean;
+  logId?: string;
 }
 export interface PlatformAnalytics {
   generatedAt?: string;

@@ -5,6 +5,10 @@ import type {
   ApiResponse,
   AdmissionEnquiry,
   AttendanceRecord,
+  BroadcastLog,
+  BroadcastResult,
+  Conversation,
+  ConversationPerson,
   FeeInvoice,
   FeePayment,
   FeeReconciliation,
@@ -239,7 +243,46 @@ export const api = {
       send<AdmissionEnquiry>(`/admissions/${id}`, "PUT", payload),
     remove: (id: string) => send(`/admissions/${id}`, "DELETE"),
   },
-  notices: { list: () => request<Notice[]>("/notices") },
+  notices: {
+    list: () => request<Notice[]>("/notices"),
+    create: (payload: Partial<Notice>) =>
+      send<Notice>("/notices", "POST", payload),
+    update: (id: string, payload: Partial<Notice>) =>
+      send<Notice>(`/notices/${id}`, "PUT", payload),
+    remove: (id: string) => send(`/notices/${id}`, "DELETE"),
+  },
+  conversations: {
+    list: (query = "") =>
+      request<Conversation[]>(`/conversations${query ? `?${query}` : ""}`),
+    people: (query: string) =>
+      request<ConversationPerson[]>(
+        `/conversations/people?q=${encodeURIComponent(query)}`,
+      ),
+    open: (payload: { participantId: string; body?: string }) =>
+      send<Conversation>("/conversations", "POST", payload),
+    get: (id: string) => request<Conversation>(`/conversations/${id}`),
+    reply: (id: string, body: string) =>
+      send<Conversation>(`/conversations/${id}/reply`, "POST", { body }),
+  },
+  broadcast: {
+    sms: (payload: {
+      audience?: string[];
+      studentIds?: string[];
+      classTags?: string[];
+      numbers?: string[];
+      message: string;
+    }) => send<BroadcastResult>("/broadcast/sms", "POST", payload),
+    email: (payload: {
+      audience?: string[];
+      studentIds?: string[];
+      classTags?: string[];
+      emails?: string[];
+      subject: string;
+      html: string;
+    }) => send<BroadcastResult>("/broadcast/email", "POST", payload),
+    logs: (query = "") =>
+      request<BroadcastLog[]>(`/broadcast/logs${query ? `?${query}` : ""}`),
+  },
   attendance: {
     list: (p?: string) => request<AttendanceRecord[]>(`/attendance${q(p)}`),
   },
@@ -309,7 +352,17 @@ export const api = {
     list: (query = "") =>
       request<TransportRoute[]>(`/transport${query ? `?${query}` : ""}`),
   },
-  events: { list: () => request<SchoolEvent[]>("/events") },
+  events: {
+    list: () => request<SchoolEvent[]>("/events"),
+    create: (payload: Partial<SchoolEvent>) =>
+      send<SchoolEvent>("/events", "POST", payload),
+    update: (id: string, payload: Partial<SchoolEvent>) =>
+      send<SchoolEvent>(`/events/${encodeURIComponent(id)}`, "PUT", payload),
+    remove: (id: string) =>
+      send(`/events/${encodeURIComponent(id)}`, "DELETE"),
+    uploadImage: (form: FormData) =>
+      uploadForm<{ url: string }>("/events/upload-image", form),
+  },
   schools: { list: () => request<School[]>("/auth/schools") },
   plans: {
     list: (query = "") =>

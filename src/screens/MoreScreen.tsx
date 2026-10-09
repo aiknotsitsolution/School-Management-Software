@@ -26,6 +26,8 @@ export default function MoreScreen() {
           can("attendance:mark") ||
           can("students:write") ||
           can("marks:write") ||
+          can("notices:read") ||
+          can("notices:publish") ||
           (isSchoolAdmin && can("staff:read")) ||
           (isSchoolAdmin && can("fees:read")) ||
           can("enquiries:write")) && (
@@ -141,6 +143,21 @@ export default function MoreScreen() {
                   <Text style={s.label}>New Enquiry</Text>
                 </Pressable>
               )}
+              {(can("notices:read") || can("notices:publish")) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("NoticeBoard")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="newspaper"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Notice Board</Text>
+                </Pressable>
+              )}
               {can("attendance:mark") && (
                 <Pressable
                   style={s.tile}
@@ -215,6 +232,58 @@ export default function MoreScreen() {
             </View>
           </View>
         )}
+      {(!isSuper || isSchoolAdmin) && (
+        <View>
+          <Text style={s.group}>Communication</Text>
+          <View style={s.grid}>
+            {!isSuper && (
+              <Pressable
+                style={s.tile}
+                onPress={() => nav.navigate("MessageBoard")}
+              >
+                <View style={s.icon}>
+                  <Ionicons
+                    name="chatbubbles"
+                    size={22}
+                    color={colors.amberDark}
+                  />
+                </View>
+                <Text style={s.label}>Message Board</Text>
+              </Pressable>
+            )}
+            {user?.role === "school_admin" && (
+              <Pressable
+                style={s.tile}
+                onPress={() => nav.navigate("Broadcast")}
+              >
+                <View style={s.icon}>
+                  <Ionicons
+                    name="megaphone"
+                    size={22}
+                    color={colors.amberDark}
+                  />
+                </View>
+                <Text style={s.label}>Broadcast</Text>
+              </Pressable>
+            )}
+            {can("events:read") && (
+              <Pressable
+                style={s.tile}
+                onPress={() => nav.navigate("Events")}
+              >
+                <View style={s.icon}>
+                  <Ionicons
+                    name="calendar"
+                    size={22}
+                    color={colors.amberDark}
+                  />
+                </View>
+                <Text style={s.label}>Events</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      )}
       {isSchoolAdmin && can("school:settings") ? (
         <View>
           <Text style={s.group}>School administration</Text>
