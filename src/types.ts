@@ -297,6 +297,7 @@ export interface AdmissionEnquiry {
   section?: string;
   contact?: string;
   email?: string;
+  feeCategory?: string;
   source?: string;
   status?: string;
   admissionNo?: string;
@@ -362,6 +363,8 @@ export interface Notice {
   title: string;
   body: string;
   category?: string;
+  audience?: string[];
+  pinned?: boolean;
   createdAt?: string;
 }
 export interface PlatformAnalytics {

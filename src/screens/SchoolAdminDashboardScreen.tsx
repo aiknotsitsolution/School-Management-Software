@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  ImageBackground,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,11 +10,14 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { BarChart, Point, TrendChart } from "../components/Charts";
+import { BarChart, PieChart, Point, TrendChart } from "../components/Charts";
 import { Card } from "../components/UI";
 import { colors } from "../theme";
+import type { RootStackParams } from "../../App";
 import type {
   AdmissionEnquiry,
   AttendanceRecord,
@@ -69,7 +73,9 @@ const dateKey = (value?: string) => {
     : parsed.toISOString().slice(0, 10);
 };
 export default function SchoolAdminDashboardScreen() {
-  const { user, school } = useAuth();
+  const { user, school, can } = useAuth();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const [data, setData] = useState<DashboardData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -294,6 +300,59 @@ export default function SchoolAdminDashboardScreen() {
     )
     .slice(0, 5);
 
+  const quickActions = [
+    {
+      label: "Add student",
+      icon: "person-add" as const,
+      color: colors.info,
+      permission: "students:write",
+      onPress: () => navigation.navigate("Form", { form: "student" }),
+    },
+    {
+      label: "Staff",
+      icon: "briefcase" as const,
+      color: "#7257C8",
+      permission: "staff:read",
+      onPress: () => navigation.navigate("Staff"),
+    },
+    {
+      label: "Collect fee",
+      icon: "wallet" as const,
+      color: colors.success,
+      permission: "fees:collect",
+      onPress: () => navigation.navigate("FeesCollection"),
+    },
+    {
+      label: "Publish notice",
+      icon: "megaphone" as const,
+      color: colors.amberDark,
+      permission: "notices:publish",
+      onPress: () => navigation.navigate("Form", { form: "notice" }),
+    },
+    {
+      label: "New event",
+      icon: "calendar" as const,
+      color: colors.alert,
+      permission: "events:publish",
+      onPress: () =>
+        navigation.navigate("Module", {
+          title: "Events",
+          endpoint: "/events",
+        }),
+    },
+    {
+      label: "Homework",
+      icon: "book" as const,
+      color: "#168C84",
+      permission: "homework:read",
+      onPress: () =>
+        navigation.navigate("Module", {
+          title: "Homework",
+          endpoint: "/homework",
+        }),
+    },
+  ].filter((action) => can(action.permission));
+
   if (loading && data.students.length === 0 && data.staff.length === 0) {
     return (
       <View style={s.loading}>
@@ -310,8 +369,26 @@ export default function SchoolAdminDashboardScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={load} />
       }
     >
-      <View style={s.hero}>
-        <Text style={s.eyebrow}>SCHOOL ADMINISTRATION</Text>
+      <ImageBackground
+        source={
+          school?.settings?.bannerImage
+            ? { uri: school.settings.bannerImage }
+            : undefined
+        }
+        style={s.hero}
+        imageStyle={s.heroImage}
+      >
+        <View style={s.heroOverlay} />
+        <View style={s.heroTopline}>
+          <Text style={s.eyebrow}>SCHOOL ADMINISTRATION</Text>
+          <Text style={s.heroDate}>
+            {new Date().toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </Text>
+        </View>
         <Text style={s.heroTitle}>
           Hello, {(user?.name || "Administrator").split(" ")[0]}
         </Text>
@@ -323,9 +400,24 @@ export default function SchoolAdminDashboardScreen() {
         </Text>
         <Text style={s.heroMeta}>
           {data.studentStats.total.toLocaleString("en-IN")} students ·{" "}
-          {teachers} teachers · {data.staff.length - teachers} support staff
+          {data.studentStats.active.toLocaleString("en-IN")} active · {teachers}{" "}
+          teachers · {Math.max(0, data.staff.length - teachers)} staff
         </Text>
-      </View>
+        <View style={s.heroStats}>
+          <HeroStat
+            value={`${attendancePercent}%`}
+            label="Attendance today"
+          />
+          <HeroStat
+            value={String(pendingEnquiries)}
+            label="New enquiries"
+          />
+          <HeroStat
+            value={data.studentStats.total.toLocaleString("en-IN")}
+            label="Students"
+          />
+        </View>
+      </ImageBackground>
 
       {!!error && (
         <View style={s.errorBox}>
@@ -338,6 +430,45 @@ export default function SchoolAdminDashboardScreen() {
             <Text style={s.retry}>{refreshing ? "Loading..." : "Retry"}</Text>
           </Pressable>
         </View>
+      )}
+
+      {!!quickActions.length && (
+        <Section title="Quick actions" action="Common tasks">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.quickActions}
+          >
+            {quickActions.map((action) => (
+              <Pressable
+                key={action.label}
+                onPress={action.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={action.label}
+                style={({ pressed }) => [
+                  s.quickAction,
+                  pressed && s.quickActionPressed,
+                ]}
+              >
+                <View
+                  style={[
+                    s.quickActionIcon,
+                    { backgroundColor: `${action.color}18` },
+                  ]}
+                >
+                  <Ionicons
+                    name={action.icon}
+                    size={19}
+                    color={action.color}
+                  />
+                </View>
+                <Text numberOfLines={1} style={s.quickActionLabel}>
+                  {action.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </Section>
       )}
 
       <View style={s.metrics}>
@@ -395,7 +526,7 @@ export default function SchoolAdminDashboardScreen() {
         action={`${data.students.length} records`}
       >
         <Card style={s.panelCard}>
-          <BarChart data={classStrength} color={colors.info} />
+          <PieChart data={classStrength} />
         </Card>
       </Section>
 
@@ -403,31 +534,33 @@ export default function SchoolAdminDashboardScreen() {
         title="Staff presence today"
         action={`${staffPresent}/${data.staff.length} present`}
       >
-        <View style={s.staffStats}>
-          <SmallStat
-            label="Present"
-            value={staffPresent}
-            color={colors.success}
+        <Card style={s.panelCard}>
+          <PieChart
+            data={[
+              { label: "Present", value: staffPresent },
+              {
+                label: "Absent",
+                value: staffToday.filter((record) =>
+                  /absent/i.test(record.status),
+                ).length,
+              },
+              {
+                label: "Not marked",
+                value: Math.max(0, data.staff.length - staffToday.length),
+              },
+            ]}
+            palette={[colors.success, colors.alert, colors.amberDark]}
           />
-          <SmallStat
-            label="Absent"
-            value={
-              staffToday.filter((record) => /absent/i.test(record.status))
-                .length
-            }
-            color={colors.alert}
-          />
-          <SmallStat
-            label="Not marked"
-            value={Math.max(0, data.staff.length - staffToday.length)}
-            color={colors.amberDark}
-          />
-        </View>
+        </Card>
       </Section>
 
       <Section title="Staff attendance trend" action="Last 14 days">
         <Card style={s.panelCard}>
-          <TrendChart data={staffAttendanceTrend} color={colors.info} />
+          <TrendChart
+            data={staffAttendanceTrend}
+            color={colors.info}
+            showArea={false}
+          />
         </Card>
       </Section>
 
@@ -484,6 +617,20 @@ export default function SchoolAdminDashboardScreen() {
         {attendanceWatchlist.map(({ student, percentage }) => (
           <Card key={student._id} style={s.watchlistCard}>
             <View style={s.watchlistTop}>
+              <View
+                style={[
+                  s.watchlistAvatar,
+                  percentage < 60
+                    ? s.watchlistAvatarLow
+                    : percentage < 75
+                      ? s.watchlistAvatarMedium
+                      : null,
+                ]}
+              >
+                <Text style={s.watchlistAvatarText}>
+                  {(student.name || "S").trim().charAt(0).toUpperCase()}
+                </Text>
+              </View>
               <View style={s.watchlistIdentity}>
                 <Text style={s.listTitle}>{student.name || "Student"}</Text>
                 <Text style={s.listMeta}>
@@ -491,63 +638,259 @@ export default function SchoolAdminDashboardScreen() {
                   {student.section ? `-${student.section}` : ""}
                 </Text>
               </View>
-              <Text
-                style={[
-                  s.attendanceValue,
-                  percentage < 60 ? s.lowAttendance : null,
-                ]}
-              >
-                {percentage}%
-              </Text>
+              <View style={s.watchlistScore}>
+                <Text
+                  style={[
+                    s.attendanceValue,
+                    percentage < 60
+                      ? s.lowAttendance
+                      : percentage < 75
+                        ? s.mediumAttendance
+                        : null,
+                  ]}
+                >
+                  {percentage}%
+                </Text>
+                <Text style={s.watchlistScoreLabel}>attendance</Text>
+              </View>
             </View>
-            <View style={s.progressTrack}>
+            <View style={s.watchlistProgressRow}>
+              <View style={s.progressTrack}>
+                <View
+                  style={[
+                    s.progressFill,
+                    { width: `${Math.max(3, percentage)}%` },
+                    percentage < 60
+                      ? s.progressLow
+                      : percentage < 75
+                        ? s.progressMedium
+                        : null,
+                  ]}
+                />
+              </View>
               <View
                 style={[
-                  s.progressFill,
-                  { width: `${Math.max(3, percentage)}%` },
-                  percentage < 60 ? s.progressLow : null,
+                  s.watchlistBadge,
+                  percentage < 60
+                    ? s.watchlistBadgeLow
+                    : percentage < 75
+                      ? s.watchlistBadgeMedium
+                      : s.watchlistBadgeGood,
                 ]}
-              />
+              >
+                <Ionicons
+                  name={percentage < 75 ? "alert-circle" : "checkmark-circle"}
+                  size={12}
+                  color={
+                    percentage < 60
+                      ? colors.alert
+                      : percentage < 75
+                        ? colors.amberDark
+                        : colors.success
+                  }
+                />
+                <Text
+                  style={[
+                    s.watchlistBadgeText,
+                    percentage < 60
+                      ? s.lowAttendance
+                      : percentage < 75
+                        ? s.mediumAttendance
+                        : s.goodAttendance,
+                  ]}
+                >
+                  {percentage < 60
+                    ? "Critical"
+                    : percentage < 75
+                      ? "Needs attention"
+                      : "On track"}
+                </Text>
+              </View>
             </View>
           </Card>
         ))}
         {!attendanceWatchlist.length && (
-          <EmptyText text="No attendance concerns found." />
+          <Card style={s.watchlistEmpty}>
+            <View style={s.watchlistEmptyIcon}>
+              <Ionicons
+                name="checkmark-circle"
+                size={21}
+                color={colors.success}
+              />
+            </View>
+            <View style={s.watchlistIdentity}>
+              <Text style={s.listTitle}>All students are on track</Text>
+              <Text style={s.listMeta}>
+                No attendance concerns found.
+              </Text>
+            </View>
+          </Card>
         )}
       </Section>
 
-      <Section title="Notices" action={`${data.notices.length} available`}>
-        {data.notices.slice(0, 4).map((notice, index) => (
-          <Card key={notice._id || index} style={s.listCard}>
-            <Text style={s.listTitle}>{notice.title}</Text>
-            <Text numberOfLines={2} style={s.listMeta}>
-              {notice.body}
-            </Text>
-            <Text style={s.dateText}>{dateLabel(notice.createdAt)}</Text>
+      <Section title="Pinned Notices" action="All">
+        {data.notices.slice(0, 4).map((notice, index) => {
+          const audience = notice.audience?.[0] || notice.category || "All";
+          return (
+            <Card key={notice._id || index} style={s.pinnedNotice}>
+              <View style={s.pinnedNoticeIcon}>
+                <Ionicons
+                  name="megaphone"
+                  size={17}
+                  color={colors.amberDark}
+                />
+              </View>
+              <View style={s.pinnedNoticeContent}>
+                <Text numberOfLines={1} style={s.listTitle}>
+                  {notice.title}
+                </Text>
+                <Text numberOfLines={1} style={s.listMeta}>
+                  {audience} · {dateLabel(notice.createdAt)}
+                </Text>
+              </View>
+              {notice.pinned && (
+                <Ionicons name="pin" size={15} color={colors.amberDark} />
+              )}
+            </Card>
+          );
+        })}
+        {!data.notices.length && (
+          <Card style={s.pinnedNoticeEmpty}>
+            <View style={s.pinnedNoticeIcon}>
+              <Ionicons
+                name="megaphone"
+                size={17}
+                color={colors.amberDark}
+              />
+            </View>
+            <View style={s.pinnedNoticeContent}>
+              <Text style={s.listTitle}>No pinned notices</Text>
+              <Text style={s.listMeta}>
+                School announcements will appear here.
+              </Text>
+            </View>
           </Card>
-        ))}
-        {!data.notices.length && <EmptyText text="No notices available." />}
+        )}
       </Section>
 
       <Section title="Bus fleet" action={`${data.busRoutes.length} routes`}>
-        {data.busRoutes.slice(0, 5).map((route, index) => (
-          <Card key={route._id || index} style={s.listCard}>
-            <View style={s.listTop}>
-              <Text style={s.listTitle}>
-                {route.routeNo || `Route ${index + 1}`}
-              </Text>
-              <StatusPill
-                label={route.currentLocation ? "Live" : "Not tracking"}
-              />
-            </View>
-            <Text style={s.listMeta}>
-              {route.stops?.length || 0} stops ·{" "}
-              {route.assignedStudents?.length || 0} assigned students
-            </Text>
-          </Card>
-        ))}
+        {data.busRoutes.slice(0, 5).map((route, index) => {
+          const stops = route.stops || [];
+          const stopName = (stop: (typeof stops)[number] | undefined) =>
+            typeof stop === "string" ? stop : stop?.name;
+          const firstStop = stopName(stops[0]);
+          const lastStop =
+            stops.length > 1 ? stopName(stops[stops.length - 1]) : undefined;
+          const isTracking = Boolean(route.currentLocation);
+
+          return (
+            <Card key={route._id || index} style={s.busCard}>
+              <View style={s.busCardHeader}>
+                <View style={s.busIcon}>
+                  <Ionicons name="bus" size={20} color={colors.info} />
+                </View>
+                <View style={s.busRouteInfo}>
+                  <Text style={s.busRouteLabel}>SCHOOL BUS</Text>
+                  <Text style={s.busRouteTitle}>
+                    {route.routeNo || `Route ${index + 1}`}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    s.busStatus,
+                    isTracking ? s.busStatusLive : s.busStatusIdle,
+                  ]}
+                >
+                  <View
+                    style={[
+                      s.busStatusDot,
+                      isTracking ? s.busStatusDotLive : s.busStatusDotIdle,
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      s.busStatusText,
+                      isTracking ? s.busStatusTextLive : s.busStatusTextIdle,
+                    ]}
+                  >
+                    {isTracking ? "Live" : "Offline"}
+                  </Text>
+                </View>
+              </View>
+
+              {(firstStop || lastStop || route.vehicleNo) && (
+                <View style={s.busRouteDetails}>
+                  <Ionicons
+                    name="navigate-outline"
+                    size={14}
+                    color={colors.info}
+                  />
+                  <Text numberOfLines={1} style={s.busRoutePath}>
+                    {firstStop && lastStop
+                      ? `${firstStop}  →  ${lastStop}`
+                      : firstStop || lastStop || route.vehicleNo}
+                  </Text>
+                  {!!route.vehicleNo && (
+                    <Text style={s.busVehicleNo}>{route.vehicleNo}</Text>
+                  )}
+                </View>
+              )}
+
+              <View style={s.busCardDivider} />
+              <View style={s.busStats}>
+                <View style={s.busStat}>
+                  <Ionicons
+                    name="location-outline"
+                    size={14}
+                    color={colors.muted}
+                  />
+                  <Text style={s.busStatValue}>{stops.length}</Text>
+                  <Text style={s.busStatLabel}>Stops</Text>
+                </View>
+                <View style={s.busStatDivider} />
+                <View style={s.busStat}>
+                  <Ionicons
+                    name="people-outline"
+                    size={14}
+                    color={colors.muted}
+                  />
+                  <Text style={s.busStatValue}>
+                    {route.assignedStudents?.length || 0}
+                  </Text>
+                  <Text style={s.busStatLabel}>Students</Text>
+                </View>
+                {!!route.driverName && (
+                  <>
+                    <View style={s.busStatDivider} />
+                    <View style={[s.busStat, s.busDriverStat]}>
+                      <Ionicons
+                        name="person-outline"
+                        size={14}
+                        color={colors.muted}
+                      />
+                      <Text numberOfLines={1} style={s.busDriverName}>
+                        {route.driverName}
+                      </Text>
+                      <Text style={s.busStatLabel}>Driver</Text>
+                    </View>
+                  </>
+                )}
+              </View>
+            </Card>
+          );
+        })}
         {!data.busRoutes.length && (
-          <EmptyText text="No bus routes configured." />
+          <Card style={s.busEmpty}>
+            <View style={s.busEmptyIcon}>
+              <Ionicons name="bus-outline" size={21} color={colors.info} />
+            </View>
+            <View style={s.busRouteInfo}>
+              <Text style={s.listTitle}>No routes configured</Text>
+              <Text style={s.listMeta}>
+                School transport routes will appear here.
+              </Text>
+            </View>
+          </Card>
         )}
       </Section>
 
@@ -556,15 +899,75 @@ export default function SchoolAdminDashboardScreen() {
         action={`${upcomingEvents.length} upcoming`}
       >
         {upcomingEvents.map((event, index) => (
-          <Card key={event._id || index} style={s.listCard}>
-            <Text style={s.listTitle}>{event.title}</Text>
-            <Text style={s.listMeta}>
-              {dateLabel(event.date)}
-              {event.venue ? ` · ${event.venue}` : ""}
-            </Text>
+          <Card key={event._id || index} style={s.eventCard}>
+            <View style={s.eventDateTile}>
+              <Text style={s.eventDateDay}>
+                {event.date
+                  ? new Date(event.date).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                    })
+                  : "—"}
+              </Text>
+              <Text style={s.eventDateMonth}>
+                {event.date
+                  ? new Date(event.date).toLocaleDateString("en-IN", {
+                      month: "short",
+                    })
+                  : ""}
+              </Text>
+            </View>
+            <View style={s.eventDetails}>
+              <View style={s.eventTitleRow}>
+                <Text numberOfLines={2} style={s.eventTitle}>
+                  {event.title}
+                </Text>
+                <Ionicons
+                  name="calendar"
+                  size={15}
+                  color={colors.info}
+                />
+              </View>
+              <View style={s.eventMetaRow}>
+                {event.category ? (
+                  <View style={s.eventCategory}>
+                    <Text numberOfLines={1} style={s.eventCategoryText}>
+                      {event.category}
+                    </Text>
+                  </View>
+                ) : null}
+                {event.venue ? (
+                  <View style={s.eventVenue}>
+                    <Ionicons
+                      name="location-outline"
+                      size={12}
+                      color={colors.muted}
+                    />
+                    <Text numberOfLines={1} style={s.eventVenueText}>
+                      {event.venue}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
           </Card>
         ))}
-        {!upcomingEvents.length && <EmptyText text="No upcoming events." />}
+        {!upcomingEvents.length && (
+          <Card style={s.eventEmpty}>
+            <View style={s.eventEmptyIcon}>
+              <Ionicons
+                name="calendar-outline"
+                size={21}
+                color={colors.info}
+              />
+            </View>
+            <View style={s.eventDetails}>
+              <Text style={s.eventTitle}>No upcoming events</Text>
+              <Text style={s.listMeta}>
+                School events will appear here when scheduled.
+              </Text>
+            </View>
+          </Card>
+        )}
       </Section>
 
       <Section title="Enrolment mix" action="Active vs inactive students">
@@ -635,6 +1038,19 @@ function Metric({
   );
 }
 
+function HeroStat({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={s.heroStat}>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={s.heroStatValue}>
+        {value}
+      </Text>
+      <Text numberOfLines={1} style={s.heroStatLabel}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 function MiniMetric({
   label,
   value,
@@ -650,23 +1066,6 @@ function MiniMetric({
       <Text style={s.miniValue}>{value}</Text>
       <Text style={s.miniLabel}>{label}</Text>
     </View>
-  );
-}
-
-function SmallStat({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: string;
-}) {
-  return (
-    <Card style={s.smallStat}>
-      <Text style={[s.smallValue, { color }]}>{value}</Text>
-      <Text style={s.smallLabel}>{label}</Text>
-    </Card>
   );
 }
 
@@ -713,11 +1112,41 @@ const s = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.paper,
   },
-  hero: { padding: 18, borderRadius: 8, backgroundColor: colors.ink, gap: 5 },
-  eyebrow: { color: colors.amber, fontSize: 9, fontWeight: "800" },
-  heroTitle: { color: "#fff", fontSize: 23, fontWeight: "800" },
-  heroSubtitle: { color: "rgba(255,255,255,0.78)", fontSize: 11 },
-  heroMeta: { color: "rgba(255,255,255,0.58)", fontSize: 9, marginTop: 4 },
+  hero: {
+    padding: 18,
+    borderRadius: 18,
+    backgroundColor: colors.ink,
+    gap: 6,
+    overflow: "hidden",
+  },
+  heroImage: { borderRadius: 18 },
+  heroOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(16, 27, 56, 0.82)",
+  },
+  heroTopline: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 3,
+  },
+  eyebrow: { color: "#F5C879", fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+  heroDate: { color: "rgba(255,255,255,0.72)", fontSize: 10 },
+  heroTitle: { color: "#fff", fontSize: 24, fontWeight: "800" },
+  heroSubtitle: { color: "rgba(255,255,255,0.86)", fontSize: 12 },
+  heroMeta: { color: "rgba(255,255,255,0.68)", fontSize: 10, marginTop: 1 },
+  heroStats: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.18)",
+  },
+  heroStat: { flex: 1, gap: 3 },
+  heroStatValue: { color: "#fff", fontSize: 19, fontWeight: "800" },
+  heroStatLabel: { color: "rgba(255,255,255,0.68)", fontSize: 9 },
   errorBox: {
     flexDirection: "row",
     gap: 10,
@@ -730,17 +1159,40 @@ const s = StyleSheet.create({
   },
   errorText: { color: colors.alert, flex: 1, fontSize: 10 },
   retry: { color: colors.info, fontSize: 10, fontWeight: "800", padding: 4 },
+  quickActions: { gap: 10, paddingRight: 4 },
+  quickAction: {
+    width: 92,
+    minHeight: 88,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  quickActionPressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
+  quickActionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickActionLabel: { color: colors.ink, fontSize: 10, fontWeight: "700" },
   metrics: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
   metricCard: {
     width: "48%",
     minHeight: 113,
     justifyContent: "space-between",
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 14,
   },
   metricLabel: {
     color: colors.muted,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     marginTop: 3,
   },
@@ -765,26 +1217,16 @@ const s = StyleSheet.create({
   miniMetric: { flex: 1, alignItems: "center", gap: 4 },
   miniValue: { color: colors.ink, fontSize: 14, fontWeight: "800" },
   miniLabel: { color: colors.muted, fontSize: 8, textAlign: "center" },
-  section: { gap: 8 },
+  section: { gap: 9 },
   sectionHeading: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "baseline",
     gap: 8,
   },
-  sectionTitle: { color: colors.ink, fontSize: 14, fontWeight: "800" },
-  sectionAction: { color: colors.muted, fontSize: 9 },
-  panelCard: { padding: 8, borderRadius: 8 },
-  staffStats: { flexDirection: "row", gap: 8 },
-  smallStat: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-    padding: 11,
-    borderRadius: 8,
-  },
-  smallValue: { fontSize: 20, fontWeight: "800" },
-  smallLabel: { color: colors.muted, fontSize: 9 },
+  sectionTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+  sectionAction: { color: colors.muted, fontSize: 10 },
+  panelCard: { padding: 10, borderRadius: 14 },
   feeSummary: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -793,6 +1235,184 @@ const s = StyleSheet.create({
   summaryLabel: { color: colors.muted, fontSize: 9 },
   summaryValue: { fontSize: 14, fontWeight: "800", marginTop: 3 },
   listCard: { padding: 11, borderRadius: 8, gap: 5 },
+  busCard: {
+    padding: 13,
+    borderRadius: 16,
+    gap: 11,
+    borderColor: "#E9EAF0",
+  },
+  busCardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  busIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF1FF",
+  },
+  busRouteInfo: { flex: 1, gap: 2 },
+  busRouteLabel: {
+    color: colors.muted,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  busRouteTitle: { color: colors.ink, fontSize: 14, fontWeight: "800" },
+  busStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  busStatusLive: { backgroundColor: "#EAF6EE" },
+  busStatusIdle: { backgroundColor: "#F1F2F4" },
+  busStatusDot: { width: 6, height: 6, borderRadius: 3 },
+  busStatusDotLive: { backgroundColor: colors.success },
+  busStatusDotIdle: { backgroundColor: colors.muted },
+  busStatusText: { fontSize: 9, fontWeight: "700" },
+  busStatusTextLive: { color: colors.success },
+  busStatusTextIdle: { color: colors.muted },
+  busRouteDetails: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    minHeight: 24,
+  },
+  busRoutePath: { flex: 1, color: colors.text, fontSize: 10, fontWeight: "600" },
+  busVehicleNo: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "700",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 7,
+    backgroundColor: "#F4F5F7",
+  },
+  busCardDivider: { height: 1, backgroundColor: "#EEF0F3" },
+  busStats: { flexDirection: "row", alignItems: "center", gap: 10 },
+  busStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  busStatValue: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+  busStatLabel: { color: colors.muted, fontSize: 9 },
+  busStatDivider: { width: 1, height: 17, backgroundColor: "#E6E8ED" },
+  busDriverStat: { flex: 1, minWidth: 0 },
+  busDriverName: {
+    flexShrink: 1,
+    color: colors.ink,
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  busEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    padding: 14,
+    borderRadius: 16,
+  },
+  busEmptyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF1FF",
+  },
+  eventCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    borderColor: "#E9EAF0",
+  },
+  eventDateTile: {
+    width: 48,
+    height: 52,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF1FF",
+  },
+  eventDateDay: { color: colors.info, fontSize: 18, fontWeight: "800" },
+  eventDateMonth: {
+    color: colors.info,
+    fontSize: 9,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  eventDetails: { flex: 1, gap: 7 },
+  eventTitleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  eventTitle: { flex: 1, color: colors.ink, fontSize: 12, fontWeight: "800" },
+  eventMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  eventCategory: {
+    maxWidth: "55%",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 7,
+    backgroundColor: "#F0F3FF",
+  },
+  eventCategoryText: { color: colors.info, fontSize: 9, fontWeight: "700" },
+  eventVenue: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    flexShrink: 1,
+  },
+  eventVenueText: { flexShrink: 1, color: colors.muted, fontSize: 9 },
+  eventEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    padding: 14,
+    borderRadius: 16,
+  },
+  eventEmptyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF1FF",
+  },
+  pinnedNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 11,
+    borderRadius: 14,
+  },
+  pinnedNoticeEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#FFFCF5",
+  },
+  pinnedNoticeIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF4D9",
+  },
+  pinnedNoticeContent: { flex: 1, gap: 4 },
   listTop: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -808,16 +1428,42 @@ const s = StyleSheet.create({
   pillText: { fontSize: 8, fontWeight: "700", textTransform: "capitalize" },
   pillLiveText: { color: colors.success },
   pillNeutralText: { color: colors.muted },
-  watchlistCard: { padding: 11, borderRadius: 8, gap: 8 },
-  watchlistTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  watchlistIdentity: { flex: 1, gap: 3 },
-  attendanceValue: { color: colors.success, fontSize: 14, fontWeight: "800" },
+  watchlistCard: {
+    padding: 13,
+    borderRadius: 16,
+    gap: 12,
+    borderColor: "#E9EAF0",
+  },
+  watchlistTop: { flexDirection: "row", alignItems: "center", gap: 11 },
+  watchlistAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF1FF",
+  },
+  watchlistAvatarLow: { backgroundColor: "#FFF0EE" },
+  watchlistAvatarMedium: { backgroundColor: "#FFF6E6" },
+  watchlistAvatarText: { color: colors.info, fontSize: 16, fontWeight: "800" },
+  watchlistIdentity: { flex: 1, gap: 4 },
+  watchlistScore: { alignItems: "flex-end", gap: 2 },
+  attendanceValue: { color: colors.success, fontSize: 18, fontWeight: "800" },
+  watchlistScoreLabel: { color: colors.muted, fontSize: 9 },
   lowAttendance: { color: colors.alert },
+  mediumAttendance: { color: colors.amberDark },
+  goodAttendance: { color: colors.success },
+  watchlistProgressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   progressTrack: {
+    flex: 1,
     height: 5,
     overflow: "hidden",
     borderRadius: 3,
-    backgroundColor: colors.border,
+    backgroundColor: "#ECEEF2",
   },
   progressFill: {
     height: "100%",
@@ -825,6 +1471,36 @@ const s = StyleSheet.create({
     backgroundColor: colors.success,
   },
   progressLow: { backgroundColor: colors.alert },
+  progressMedium: { backgroundColor: colors.amberDark },
+  watchlistBadge: {
+    minWidth: 100,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 9,
+  },
+  watchlistBadgeLow: { backgroundColor: "#FFF0EE" },
+  watchlistBadgeMedium: { backgroundColor: "#FFF6E6" },
+  watchlistBadgeGood: { backgroundColor: "#EAF6EE" },
+  watchlistBadgeText: { fontSize: 9, fontWeight: "700" },
+  watchlistEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    padding: 14,
+    borderRadius: 16,
+  },
+  watchlistEmptyIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF6EE",
+  },
   enrolmentCard: { padding: 9, borderRadius: 8 },
   ratioText: {
     color: colors.muted,

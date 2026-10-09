@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   RefreshControl,
@@ -21,6 +22,19 @@ const statuses = [
   "Campus Visit Scheduled",
   "Admission Confirmed",
   "Declined",
+];
+const feeCategories = ["General", "OBC", "SC", "ST", "EWS"];
+const stages = [
+  { key: "All", label: "All leads", color: colors.info },
+  { key: "New", label: "New leads", color: "#1497D4" },
+  { key: "Contacted", label: "Contacted", color: colors.amberDark },
+  {
+    key: "Campus Visit Scheduled",
+    label: "Campus visit",
+    color: "#7257C8",
+  },
+  { key: "Admission Confirmed", label: "Confirmed", color: colors.success },
+  { key: "Declined", label: "Declined", color: colors.alert },
 ];
 const sources = ["Website", "Walk-in", "Referral", "Phone", "Other"];
 const classes = [
@@ -56,6 +70,7 @@ interface EnquiryForm {
   section: string;
   contact: string;
   email: string;
+  feeCategory: string;
   source: string;
   status: string;
   followUpDate: string;
@@ -71,6 +86,7 @@ const blankForm = (): EnquiryForm => ({
   section: "",
   contact: "",
   email: "",
+  feeCategory: "General",
   source: "Website",
   status: "New",
   followUpDate: "",
@@ -97,6 +113,7 @@ export default function AdmissionEnquiryScreen() {
   const [items, setItems] = useState<EnquiryRow[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -163,6 +180,9 @@ export default function AdmissionEnquiryScreen() {
       return matchesStatus && matchesQuery;
     });
   }, [items, query, statusFilter]);
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visibleItems = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const openCreate = () => {
     setEditing(null);
@@ -180,6 +200,7 @@ export default function AdmissionEnquiryScreen() {
       section: item.section || "",
       contact: item.contact || "",
       email: item.email || "",
+      feeCategory: item.feeCategory || "General",
       source: item.source || "Other",
       status: item.status || "New",
       followUpDate: item.followUpDate
@@ -225,6 +246,9 @@ export default function AdmissionEnquiryScreen() {
       section: form.section.trim() || undefined,
       contact: form.contact.trim(),
       email: form.email.trim().toLowerCase() || undefined,
+      feeCategory: feeCategories.includes(form.feeCategory)
+        ? form.feeCategory
+        : "General",
       source: form.source,
       status: backendStatus[form.status] || form.status,
       followUpDate: form.followUpDate || undefined,
@@ -241,6 +265,7 @@ export default function AdmissionEnquiryScreen() {
           ? previous.map((item) => (item.id === editing.id ? updated : item))
           : [updated, ...previous],
       );
+      setPage(1);
       setFormVisible(false);
       setEditing(null);
       setForm(blankForm());
@@ -316,39 +341,63 @@ export default function AdmissionEnquiryScreen() {
             accessibilityLabel="New enquiry"
           >
             <Ionicons name="add" size={21} color="#fff" />
+            <Text style={s.addButtonText}>New enquiry</Text>
           </Pressable>
         </View>
 
         <View style={s.stageGrid}>
-          {statuses.map((status) => (
-            <Pressable
-              key={status}
-              onPress={() =>
-                setStatusFilter(statusFilter === status ? "All" : status)
-              }
-              style={[s.stageChip, statusFilter === status && s.selectedStage]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: statusFilter === status }}
-            >
-              <Text
-                style={[
-                  s.stageCount,
-                  statusFilter === status && s.selectedText,
-                ]}
+          {stages.map((stage) => {
+            const count =
+              stage.key === "All"
+                ? items.length
+                : counts[stage.key] || 0;
+            const selectedStage = statusFilter === stage.key;
+            const percent = items.length
+              ? Math.round((count / items.length) * 100)
+              : 0;
+            return (
+              <Pressable
+                key={stage.key}
+                onPress={() => {
+                  setStatusFilter(
+                    selectedStage && stage.key !== "All" ? "All" : stage.key,
+                  );
+                  setPage(1);
+                }}
+                style={[s.stageCard, selectedStage && s.selectedStage]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedStage }}
               >
-                {counts[status] || 0}
-              </Text>
-              <Text
-                numberOfLines={2}
-                style={[
-                  s.stageLabel,
-                  statusFilter === status && s.selectedText,
-                ]}
-              >
-                {status}
-              </Text>
-            </Pressable>
-          ))}
+                <View style={s.stageTop}>
+                  <Text
+                    numberOfLines={1}
+                    style={[s.stageLabel, selectedStage && s.selectedText]}
+                  >
+                    {stage.label}
+                  </Text>
+                  <View
+                    style={[s.stageDot, { backgroundColor: stage.color }]}
+                  />
+                </View>
+                <Text style={[s.stageCount, selectedStage && s.selectedText]}>
+                  {count}
+                </Text>
+                <View style={s.stageProgressTrack}>
+                  <View
+                    style={[
+                      s.stageProgressFill,
+                      { width: `${percent}%`, backgroundColor: stage.color },
+                    ]}
+                  />
+                </View>
+                <Text
+                  style={[s.stagePercent, selectedStage && s.selectedSubText]}
+                >
+                  {percent}% of leads
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <View style={s.searchBox}>
@@ -356,13 +405,19 @@ export default function AdmissionEnquiryScreen() {
           <Input
             placeholder="Search child, parent, class or contact"
             value={query}
-            onChangeText={setQuery}
+            onChangeText={(value) => {
+              setQuery(value);
+              setPage(1);
+            }}
             style={s.searchInput}
             accessibilityLabel="Search enquiries"
           />
           {!!query && (
             <Pressable
-              onPress={() => setQuery("")}
+              onPress={() => {
+                setQuery("");
+                setPage(1);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Clear search"
             >
@@ -378,28 +433,34 @@ export default function AdmissionEnquiryScreen() {
           <FilterChip
             label={`All · ${counts.All}`}
             selected={statusFilter === "All"}
-            onPress={() => setStatusFilter("All")}
+            onPress={() => {
+              setStatusFilter("All");
+              setPage(1);
+            }}
           />
           {statuses.map((status) => (
             <FilterChip
               key={status}
               label={status}
               selected={statusFilter === status}
-              onPress={() =>
-                setStatusFilter(statusFilter === status ? "All" : status)
-              }
+              onPress={() => {
+                setStatusFilter(statusFilter === status ? "All" : status);
+                setPage(1);
+              }}
             />
           ))}
         </ScrollView>
 
         <Text style={s.resultCount}>
-          Showing {filtered.length} of {items.length} enquiries
+          Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–
+          {Math.min(page * pageSize, filtered.length)} of {filtered.length}{" "}
+          enquiries
         </Text>
         {loading ? (
           <ActivityIndicator size="large" color={colors.ink} style={s.loader} />
         ) : filtered.length ? (
           <View style={s.list}>
-            {filtered.map((item) => (
+            {visibleItems.map((item) => (
               <Pressable
                 key={item.id}
                 onPress={() => {
@@ -434,6 +495,23 @@ export default function AdmissionEnquiryScreen() {
                       value={formatDate(item.followUpDate)}
                     />
                   </View>
+                  <View style={s.categoryRow}>
+                    <Ionicons
+                      name="pricetag-outline"
+                      size={12}
+                      color={colors.amberDark}
+                    />
+                    <Text style={s.categoryLabel}>Category</Text>
+                    <Text
+                      style={[
+                        s.categoryValue,
+                        (item.feeCategory || "General") !== "General" &&
+                          s.categoryValueSpecial,
+                      ]}
+                    >
+                      {item.feeCategory || "General"}
+                    </Text>
+                  </View>
                   <View style={s.cardBottom}>
                     <Text style={s.contact}>
                       {item.contact || "No contact"}
@@ -447,6 +525,35 @@ export default function AdmissionEnquiryScreen() {
           </View>
         ) : (
           <EmptyState onAdd={openCreate} />
+        )}
+        {!loading && filtered.length > pageSize && (
+          <View style={s.pagination}>
+            <Text style={s.paginationInfo}>
+              Page {page} of {pageCount}
+            </Text>
+            <View style={s.paginationActions}>
+              <Pressable
+                onPress={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page <= 1}
+                style={[s.pageButton, page <= 1 && s.pageButtonDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel="Previous page"
+              >
+                <Ionicons name="chevron-back" size={16} color={colors.ink} />
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  setPage((current) => Math.min(pageCount, current + 1))
+                }
+                disabled={page >= pageCount}
+                style={[s.pageButton, page >= pageCount && s.pageButtonDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel="Next page"
+              >
+                <Ionicons name="chevron-forward" size={16} color={colors.ink} />
+              </Pressable>
+            </View>
+          </View>
         )}
       </ScrollView>
 
@@ -535,6 +642,20 @@ export default function AdmissionEnquiryScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
             />
+            <Text style={s.fieldLabel}>Fee category</Text>
+            <Text style={s.fieldHint}>
+              Carried into student onboarding for fee concessions.
+            </Text>
+            <View style={s.categoryOptions}>
+              {feeCategories.map((category) => (
+                <FilterChip
+                  key={category}
+                  label={category}
+                  selected={form.feeCategory === category}
+                  onPress={() => setField("feeCategory", category)}
+                />
+              ))}
+            </View>
             <Field
               label="Follow-up date (YYYY-MM-DD)"
               value={form.followUpDate}
@@ -639,6 +760,10 @@ export default function AdmissionEnquiryScreen() {
                 />
                 <Info label="Source" value={selected.source || "Other"} />
                 <Info
+                  label="Fee category"
+                  value={selected.feeCategory || "General"}
+                />
+                <Info
                   label="Enquiry date"
                   value={formatDate(selected.createdAt)}
                 />
@@ -660,35 +785,86 @@ export default function AdmissionEnquiryScreen() {
                   <StatusPill status={selected.status || "New"} />
                 </View>
               </Card>
-              <Text style={s.sectionTitle}>Update pipeline</Text>
-              <View style={s.statusGrid}>
-                {statuses
-                  .filter(
-                    (status) =>
-                      status !== "Admission Confirmed" ||
-                      selected.status === status,
-                  )
-                  .map((status) => (
-                    <FilterChip
-                      key={status}
-                      label={status}
-                      selected={selected.status === status}
-                      onPress={() => {
-                        if (status !== "Admission Confirmed")
-                          void changeStatus(selected, status);
-                      }}
-                    />
-                  ))}
-                {selected.status !== "Admission Confirmed" && (
-                  <FilterChip
-                    label="Admission Confirmed"
-                    selected={false}
-                    onPress={() => {
-                      setNeedAdmissionId(true);
-                      setPendingAdmissionId(selected.admissionNo || "");
-                    }}
-                  />
+              <View style={s.pipelineHeading}>
+                <Text style={s.sectionTitle}>
+                  {selected.status === "Admission Confirmed"
+                    ? "Pipeline completed"
+                    : "Update pipeline"}
+                </Text>
+                {busyStatus && (
+                  <ActivityIndicator size="small" color={colors.info} />
                 )}
+              </View>
+              <View style={s.pipeline}>
+                {statuses
+                  .filter((status) => status !== "Declined")
+                  .map((status, index) => {
+                    const currentIndex = statuses
+                      .filter((stage) => stage !== "Declined")
+                      .indexOf(selected.status || "New");
+                    const isCurrent = selected.status === status;
+                    const isComplete =
+                      currentIndex >= 0 && index < currentIndex;
+                    const color =
+                      status === "Admission Confirmed"
+                        ? colors.success
+                        : status === "Campus Visit Scheduled"
+                          ? "#7257C8"
+                          : status === "Contacted"
+                            ? colors.amberDark
+                            : colors.info;
+                    return (
+                      <Pressable
+                        key={status}
+                        disabled={
+                          busyStatus ||
+                          selected.status === "Admission Confirmed"
+                        }
+                        onPress={() => void changeStatus(selected, status)}
+                        style={[
+                          s.pipelineStep,
+                          isCurrent && s.pipelineStepCurrent,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isCurrent }}
+                      >
+                        <View
+                          style={[
+                            s.pipelineNumber,
+                            (isComplete || isCurrent) && {
+                              backgroundColor: color,
+                              borderColor: color,
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name={
+                              isComplete ? "checkmark" : "ellipse"
+                            }
+                            size={isComplete ? 14 : 8}
+                            color={
+                              isComplete || isCurrent
+                                ? "#fff"
+                                : colors.muted
+                            }
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            s.pipelineLabel,
+                            isCurrent && s.pipelineLabelCurrent,
+                          ]}
+                        >
+                          {status}
+                        </Text>
+                        {isCurrent && (
+                          <View style={s.currentTag}>
+                            <Text style={s.currentTagText}>CURRENT</Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
               </View>
               {needAdmissionId && (
                 <Card style={s.detailCard}>
@@ -716,11 +892,50 @@ export default function AdmissionEnquiryScreen() {
                   />
                 </Card>
               )}
-              <Button
-                title="Edit enquiry"
-                variant="ghost"
-                onPress={() => openEdit(selected)}
-              />
+              {selected.status !== "Declined" &&
+                selected.status !== "Admission Confirmed" && (
+                  <Pressable
+                    onPress={() => void changeStatus(selected, "Declined")}
+                    disabled={busyStatus}
+                    style={s.declineButton}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name="close-circle-outline"
+                      size={16}
+                      color={colors.alert}
+                    />
+                    <Text style={s.declineText}>Mark as declined</Text>
+                  </Pressable>
+                )}
+              <View style={s.detailActions}>
+                {!!selected.contact && (
+                  <Pressable
+                    onPress={() => {
+                      void Linking.openURL(`tel:${selected.contact}`).catch(
+                        (linkError: Error) =>
+                          setError(
+                            linkError.message || "Unable to open phone dialer.",
+                          ),
+                      );
+                    }}
+                    style={s.callButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Call ${selected.parentName || "parent"}`}
+                  >
+                    <Ionicons name="call-outline" size={17} color={colors.info} />
+                  </Pressable>
+                )}
+                {selected.status !== "Admission Confirmed" && (
+                  <View style={s.actionGrow}>
+                    <Button
+                      title="Edit enquiry"
+                      variant="ghost"
+                      onPress={() => openEdit(selected)}
+                    />
+                  </View>
+                )}
+              </View>
             </ScrollView>
           </View>
         )}
@@ -832,29 +1047,56 @@ const s = StyleSheet.create({
   },
   subtitle: { color: colors.muted, fontSize: 10, marginTop: 3 },
   addButton: {
-    width: 40,
+    minHeight: 40,
+    flexDirection: "row",
     height: 40,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
+    gap: 4,
+    paddingHorizontal: 11,
+    borderRadius: 12,
     backgroundColor: colors.ink,
   },
-  stageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  stageChip: {
-    width: "31%",
-    minHeight: 68,
+  addButtonText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  stageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
+  stageCard: {
+    width: "48%",
+    minHeight: 96,
     justifyContent: "center",
-    gap: 4,
-    padding: 10,
-    borderRadius: 8,
+    gap: 5,
+    padding: 11,
+    borderRadius: 15,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
   },
   selectedStage: { backgroundColor: colors.ink, borderColor: colors.ink },
-  stageCount: { color: colors.ink, fontSize: 18, fontWeight: "800" },
-  stageLabel: { color: colors.muted, fontSize: 9, fontWeight: "600" },
+  stageTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 5,
+  },
+  stageDot: { width: 7, height: 7, borderRadius: 4 },
+  stageCount: { color: colors.ink, fontSize: 22, fontWeight: "800" },
+  stageLabel: {
+    flex: 1,
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
   selectedText: { color: "#fff" },
+  selectedSubText: { color: "rgba(255,255,255,0.65)" },
+  stageProgressTrack: {
+    height: 4,
+    overflow: "hidden",
+    borderRadius: 3,
+    backgroundColor: "#EEF0F3",
+  },
+  stageProgressFill: { height: "100%", borderRadius: 3 },
+  stagePercent: { color: colors.muted, fontSize: 8 },
   searchBox: {
     minHeight: 44,
     flexDirection: "row",
@@ -888,9 +1130,28 @@ const s = StyleSheet.create({
   selectedFilterText: { color: "#fff" },
   loader: { marginTop: 24 },
   resultCount: { color: colors.muted, fontSize: 9 },
+  pagination: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 4,
+  },
+  paginationInfo: { color: colors.muted, fontSize: 10, fontWeight: "600" },
+  paginationActions: { flexDirection: "row", gap: 8 },
+  pageButton: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  pageButtonDisabled: { opacity: 0.4 },
   sectionTitle: { color: colors.ink, fontSize: 13, fontWeight: "800" },
   list: { gap: 8 },
-  enquiryCard: { padding: 11, borderRadius: 8, gap: 9 },
+  enquiryCard: { padding: 13, borderRadius: 15, gap: 9 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: 9 },
   enquiryIcon: {
     width: 35,
@@ -909,6 +1170,25 @@ const s = StyleSheet.create({
   infoItem: { flex: 1, gap: 3, paddingVertical: 4 },
   infoLabel: { color: colors.muted, fontSize: 8, fontWeight: "600" },
   infoValue: { color: colors.ink, fontSize: 9, fontWeight: "700" },
+  categoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  categoryLabel: { color: colors.muted, fontSize: 9 },
+  categoryValue: {
+    color: colors.muted,
+    fontSize: 8,
+    fontWeight: "700",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: "#F1F2F4",
+  },
+  categoryValueSpecial: {
+    color: colors.amberDark,
+    backgroundColor: "#FFF4D9",
+  },
   cardBottom: {
     flexDirection: "row",
     alignItems: "center",
@@ -943,10 +1223,12 @@ const s = StyleSheet.create({
   formContent: { padding: 16, paddingBottom: 28, gap: 13 },
   field: { gap: 5 },
   fieldLabel: { color: colors.ink, fontSize: 10, fontWeight: "700" },
+  fieldHint: { color: colors.muted, fontSize: 9, marginTop: -8 },
   input: { minHeight: 40, borderRadius: 8, fontSize: 11, paddingVertical: 7 },
   twoColumns: { flexDirection: "row", gap: 9 },
   column: { flex: 1 },
   statusGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  categoryOptions: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   modalActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -957,7 +1239,64 @@ const s = StyleSheet.create({
   },
   actionGrow: { flex: 1 },
   detailContent: { padding: 16, paddingBottom: 30, gap: 13 },
-  detailCard: { padding: 12, borderRadius: 8 },
+  detailCard: { padding: 14, borderRadius: 14 },
+  pipelineHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pipeline: { gap: 4 },
+  pipelineStep: {
+    minHeight: 43,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 10,
+    borderRadius: 11,
+  },
+  pipelineStepCurrent: { backgroundColor: "#F0F3FA" },
+  pipelineNumber: {
+    width: 23,
+    height: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+  },
+  pipelineLabel: { flex: 1, color: colors.muted, fontSize: 11, fontWeight: "600" },
+  pipelineLabelCurrent: { color: colors.ink, fontWeight: "800" },
+  currentTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 9,
+    backgroundColor: "#E5ECFA",
+  },
+  currentTagText: { color: colors.info, fontSize: 8, fontWeight: "800" },
+  declineButton: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F1D4D0",
+    backgroundColor: "#FFF8F7",
+  },
+  declineText: { color: colors.alert, fontSize: 11, fontWeight: "700" },
+  detailActions: { flexDirection: "row", alignItems: "center", gap: 9 },
+  callButton: {
+    width: 46,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
   currentStatus: {
     flexDirection: "row",
     justifyContent: "space-between",
