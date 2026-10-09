@@ -142,8 +142,12 @@ async function request<T>(
               : "Request failed. Please check your details and try again.";
     const err = new Error(body.message || statusMessage) as Error & {
       status?: number;
+      conflicts?: string[];
     };
     err.status = res.status;
+    if (Array.isArray(body.conflicts)) {
+      err.conflicts = body.conflicts.map(String);
+    }
     throw err;
   }
   return body as ApiResponse<T>;
@@ -178,6 +182,16 @@ export const api = {
     send<unknown>("/auth/change-password", "POST", payload),
   students: {
     list: (p?: string) => request<Student[]>(`/students${q(p)}`),
+    create: (payload: Partial<Student> & Record<string, unknown>) =>
+      send<Student>("/students", "POST", payload),
+    update: (id: string, payload: Partial<Student> & Record<string, unknown>) =>
+      send<Student>(`/students/${encodeURIComponent(id)}`, "PUT", payload),
+    remove: (id: string) =>
+      send(`/students/${encodeURIComponent(id)}`, "DELETE"),
+    restore: (id: string) =>
+      send<Student>(`/students/${encodeURIComponent(id)}/restore`, "POST"),
+    uploadPhoto: (form: FormData) =>
+      uploadForm<{ url: string }>("/students/upload-photo", form),
     stats: () =>
       request<{ total: number; active: number }>("/students/stats/summary"),
     pendingRegistrations: (p?: string) =>
@@ -347,6 +361,13 @@ export const api = {
   assignments: {
     list: (query = "") =>
       request<TeacherAssignment[]>(`/assignments${query ? `?${query}` : ""}`),
+    me: () =>
+      request<{
+        classTeacher?: Record<string, unknown>[];
+        teaching?: Record<string, unknown>[];
+        teachingScopes?: { class: string; section?: string | null }[];
+        primaryScope?: { class?: string; section?: string | null } | null;
+      }>("/assignments/me"),
   },
   transport: {
     list: (query = "") =>

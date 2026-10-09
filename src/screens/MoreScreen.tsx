@@ -22,6 +22,8 @@ export default function MoreScreen() {
         (can("transport:read") ||
           can("students:read") ||
           can("timetable:read") ||
+          can("exams:read") ||
+          can("exams:write") ||
           can("marks:read") ||
           can("attendance:mark") ||
           can("students:write") ||
@@ -87,7 +89,7 @@ export default function MoreScreen() {
                   <Text style={s.label}>ID Card</Text>
                 </Pressable>
               )}
-              {can("timetable:read") && !isSchoolAdmin && (
+              {can("timetable:read") && (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("Timetable")}
@@ -96,6 +98,21 @@ export default function MoreScreen() {
                     <Ionicons name="time" size={22} color={colors.amberDark} />
                   </View>
                   <Text style={s.label}>Timetable</Text>
+                </Pressable>
+              )}
+              {(can("exams:read") || can("exams:write")) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Examination")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="clipboard"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Examination</Text>
                 </Pressable>
               )}
               {can("marks:read") && (
@@ -176,7 +193,7 @@ export default function MoreScreen() {
               {can("students:write") && (
                 <Pressable
                   style={s.tile}
-                  onPress={() => nav.navigate("Form", { form: "student" })}
+                  onPress={() => nav.navigate("StudentOnboard")}
                 >
                   <View style={s.icon}>
                     <Ionicons
@@ -185,7 +202,22 @@ export default function MoreScreen() {
                       color={colors.amberDark}
                     />
                   </View>
-                  <Text style={s.label}>Add Student</Text>
+                  <Text style={s.label}>Student Onboard</Text>
+                </Pressable>
+              )}
+              {can("students:read") && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("StudentDatabase")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="people"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Student Database</Text>
                 </Pressable>
               )}
               {can("leaves:apply") && (
@@ -310,21 +342,6 @@ export default function MoreScreen() {
               </View>
               <Text style={s.label}>Subscription</Text>
             </Pressable>
-            {can("timetable:read") ? (
-              <Pressable
-                style={s.tile}
-                onPress={() => nav.navigate("Timetable")}
-              >
-                <View style={s.icon}>
-                  <Ionicons
-                    name="calendar"
-                    size={22}
-                    color={colors.amberDark}
-                  />
-                </View>
-                <Text style={s.label}>Timetable</Text>
-              </Pressable>
-            ) : null}
           </View>
         </View>
       ) : null}
@@ -332,7 +349,9 @@ export default function MoreScreen() {
         const items = g.items.filter((i) =>
           isSuper
             ? i.platform && i.key !== "p-schools"
-            : !i.platform && (!i.perm || can(i.perm)),
+            : !i.platform &&
+              i.key !== "exams" &&
+              (!i.perm || can(i.perm)),
         );
         if (!items.length) return null;
         return (

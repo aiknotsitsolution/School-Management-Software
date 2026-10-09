@@ -241,6 +241,24 @@ export interface Student {
   rollNo?: string;
   admissionNo?: string;
   status?: string;
+  gender?: string;
+  dob?: string;
+  bloodGroup?: string;
+  medium?: string;
+  house?: string;
+  feeCategory?: string;
+  feeStatus?: string;
+  attendance?: number;
+  parentName?: string;
+  fatherName?: string;
+  motherName?: string;
+  parentContact?: string;
+  phone?: string;
+  parentEmail?: string;
+  email?: string;
+  address?: string;
+  photoUrl?: string;
+  deletedAt?: string | null;
 }
 export interface AttendanceRecord {
   _id?: string;

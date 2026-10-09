@@ -22,6 +22,7 @@ import NoticesScreen from "./src/screens/NoticesScreen";
 import MessagesScreen from "./src/screens/MessagesScreen";
 import BroadcastScreen from "./src/screens/BroadcastScreen";
 import EventsScreen from "./src/screens/EventsScreen";
+import StudentOnboardScreen from "./src/screens/StudentOnboardScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import MoreScreen from "./src/screens/MoreScreen";
 import ModuleListScreen from "./src/screens/ModuleListScreen";
@@ -62,6 +63,8 @@ export type RootStackParams = {
   MessageBoard: undefined;
   Broadcast: undefined;
   Events: undefined;
+  StudentOnboard: undefined;
+  StudentDatabase: undefined;
   Detail: { title: string; row: Record<string, unknown>; endpoint?: string };
   Form: { form: string; initial?: Record<string, string> };
   Edit: { endpoint: string; row: Record<string, unknown> };
@@ -236,6 +239,16 @@ function Root() {
         name="Events"
         component={EventsScreen}
         options={{ title: "Events" }}
+      />
+      <Stack.Screen
+        name="StudentOnboard"
+        component={StudentOnboardScreen}
+        options={{ title: "Student Onboard" }}
+      />
+      <Stack.Screen
+        name="StudentDatabase"
+        component={StudentsScreen}
+        options={{ title: "Student Database" }}
       />
       <Stack.Screen
         name="Staff"

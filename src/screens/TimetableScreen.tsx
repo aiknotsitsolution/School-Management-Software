@@ -19,6 +19,17 @@ import { colors } from "../theme";
 import type { TimetableSubstitution } from "../types";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const NON_ACADEMIC_SUBJECTS: NamedOption[] = [
+  "Break",
+  "Lunch",
+  "Library",
+  "Assembly",
+  "Sports",
+  "Games",
+  "Free",
+  "Recess",
+].map((name) => ({ id: `non-academic:${name.toLowerCase()}`, name }));
+const DAY_COLORS = ["#5266D8", "#8A63C7", "#168A84", "#2984B9", "#C0782B", "#37885C"];
 const WEEKDAY_NAMES = [
   "Sunday",
   "Monday",
@@ -57,6 +68,7 @@ const formatTime = (value: unknown) => {
 const recordName = (item: Row) => String(item.name || item.className || "").trim();
 type PeriodDraft = {
   day: string;
+  days: string[];
   index?: number;
   subject: string;
   teacherId: string;
@@ -77,11 +89,16 @@ type SubstitutionDraft = {
 export default function TimetableScreen() {
   const { user, can } = useAuth();
   const isStudent = user?.role === "student";
+  const isTeacher = user?.role === "teacher";
   const canWrite = can("timetable:write") && !isStudent;
   const [className, setClassName] = useState("");
   const [section, setSection] = useState("");
+  const [substitutionExpanded, setSubstitutionExpanded] = useState(false);
   const [classes, setClasses] = useState<string[]>([]);
   const [sectionRows, setSectionRows] = useState<Row[]>([]);
+  const [teacherScopes, setTeacherScopes] = useState<
+    { class: string; section: string }[]
+  >([]);
   const [subjects, setSubjects] = useState<NamedOption[]>([]);
   const [rooms, setRooms] = useState<NamedOption[]>([]);
   const [teachers, setTeachers] = useState<NamedOption[]>([]);
@@ -93,6 +110,15 @@ export default function TimetableScreen() {
   const [masterError, setMasterError] = useState("");
   const [picker, setPicker] = useState<"class" | "section" | null>(null);
   const [draft, setDraft] = useState<PeriodDraft | null>(null);
+  const [periodSaveErrors, setPeriodSaveErrors] = useState<string[]>([]);
+  const [periodConflicts, setPeriodConflicts] = useState<string[]>([]);
+  const [periodSaveNotice, setPeriodSaveNotice] = useState("");
+  const [copySource, setCopySource] = useState("");
+  const [copyTargets, setCopyTargets] = useState<string[]>([]);
+  const [copyOverwrite, setCopyOverwrite] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [copyErrors, setCopyErrors] = useState<string[]>([]);
+  const [copyNotice, setCopyNotice] = useState("");
   const [substitutionDraft, setSubstitutionDraft] =
     useState<SubstitutionDraft | null>(null);
   const [choicePicker, setChoicePicker] = useState<
@@ -110,6 +136,12 @@ export default function TimetableScreen() {
   const [substitutionRefreshKey, setSubstitutionRefreshKey] = useState(0);
 
   const classSections = useMemo(() => {
+    if (isTeacher) {
+      return teacherScopes
+        .filter((scope) => scope.class === className)
+        .map((scope) => scope.section)
+        .filter(Boolean);
+    }
     const matching = sectionRows
       .filter((item) => !item.className || String(item.className) === className)
       .map(recordName)
@@ -117,7 +149,7 @@ export default function TimetableScreen() {
     return [...new Set(matching)].sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true }),
     );
-  }, [className, sectionRows]);
+  }, [className, isTeacher, sectionRows, teacherScopes]);
 
   const loadTimetable = useCallback(
     async (selectedClass: string, selectedSection: string, refresh = false) => {
@@ -169,6 +201,78 @@ export default function TimetableScreen() {
             );
             setLoading(false);
           }
+        });
+      return () => {
+        active = false;
+      };
+    }
+
+    if (isTeacher) {
+      setLoadingMasters(true);
+      setMasterError("");
+      api.assignments
+        .me()
+        .then(({ data }) => {
+          if (!active) return;
+          const scopes = [
+            ...(Array.isArray(data.classTeacher) ? data.classTeacher : []),
+            ...(Array.isArray(data.teachingScopes) ? data.teachingScopes : []),
+          ]
+            .map((scope) => ({
+              class: String(scope.class || "").trim(),
+              section: String(scope.section || "").trim(),
+            }))
+            .filter((scope) => scope.class && scope.section)
+            .filter(
+              (scope, index, all) =>
+                all.findIndex(
+                  (item) =>
+                    item.class === scope.class &&
+                    item.section === scope.section,
+                ) === index,
+            )
+            .sort(
+              (a, b) =>
+                a.class.localeCompare(b.class, undefined, { numeric: true }) ||
+                a.section.localeCompare(b.section, undefined, { numeric: true }),
+            );
+          setTeacherScopes(scopes);
+          setClasses([...new Set(scopes.map((scope) => scope.class))]);
+          setSectionRows(
+            scopes.map((scope) => ({
+              className: scope.class,
+              name: scope.section,
+            })),
+          );
+          const primaryClass = String(data.primaryScope?.class || "");
+          const primarySection = String(data.primaryScope?.section || "");
+          const initialScope =
+            scopes.find(
+              (scope) =>
+                scope.class === primaryClass &&
+                scope.section === primarySection,
+            ) || scopes[0];
+          if (initialScope) {
+            setClassName(initialScope.class);
+            setSection(initialScope.section);
+          } else {
+            setClassName("");
+            setSection("");
+            setMasterError(
+              "No active class or subject assignment was found. Contact your school admin.",
+            );
+          }
+        })
+        .catch((loadError: unknown) => {
+          if (!active) return;
+          setMasterError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Could not load your teaching assignments.",
+          );
+        })
+        .finally(() => {
+          if (active) setLoadingMasters(false);
         });
       return () => {
         active = false;
@@ -260,7 +364,7 @@ export default function TimetableScreen() {
     return () => {
       active = false;
     };
-  }, [isStudent, loadTimetable]);
+  }, [isStudent, isTeacher, loadTimetable]);
 
   useEffect(() => {
     if (!isStudent && className && section) {
@@ -321,6 +425,14 @@ export default function TimetableScreen() {
     [slots],
   );
   const selectClass = (value: string) => {
+    if (isTeacher) {
+      const nextSection =
+        teacherScopes.find((scope) => scope.class === value)?.section || "";
+      setClassName(value);
+      setSection(nextSection);
+      setPicker(null);
+      return;
+    }
     const nextSections = [...new Set(
       sectionRows
         .filter((item) => !item.className || String(item.className) === value)
@@ -333,9 +445,14 @@ export default function TimetableScreen() {
   };
 
   const options = picker === "class" ? classes : classSections;
-  const openAddPeriod = (selectedDay: string) => {
+  const openAddPeriod = (selectedDay: string | string[]) => {
+    const days = Array.isArray(selectedDay) ? selectedDay : [selectedDay];
+    setPeriodSaveErrors([]);
+    setPeriodConflicts([]);
+    setPeriodSaveNotice("");
     setDraft({
-      day: selectedDay,
+      day: days[0] || DAYS[0],
+      days,
       subject: "",
       teacherId: "",
       teacherName: "",
@@ -346,14 +463,24 @@ export default function TimetableScreen() {
     });
   };
   const openAddToday = () => {
-    const weekday = new Date().getDay();
-    openAddPeriod(
-      DAYS[weekday === 0 ? 0 : Math.min(weekday - 1, DAYS.length - 1)],
-    );
+    openAddPeriod(DAYS);
+  };
+  const toggleDraftDay = (day: string) => {
+    setDraft((current) => {
+      if (!current || current.index !== undefined) return current;
+      const selected = current.days.includes(day)
+        ? current.days.filter((item) => item !== day)
+        : [...current.days, day];
+      return { ...current, days: selected, day: selected[0] || current.day };
+    });
   };
   const openEditPeriod = (selectedDay: string, index: number, period: Row) => {
+    setPeriodSaveErrors([]);
+    setPeriodConflicts([]);
+    setPeriodSaveNotice("");
     setDraft({
       day: selectedDay,
+      days: [selectedDay],
       index,
       subject: String(period.subject || ""),
       teacherId: String(period.teacherId || ""),
@@ -381,10 +508,11 @@ export default function TimetableScreen() {
       );
       return;
     }
-    const currentSlot = slots.find((slot) => slot.day === draft.day);
-    const currentPeriods = [...((currentSlot?.periods as Row[]) || [])].sort((a, b) =>
-      String(a.startTime || "").localeCompare(String(b.startTime || "")),
-    );
+    const targetDays = draft.index === undefined ? draft.days : [draft.day];
+    if (!targetDays.length) {
+      Alert.alert("Choose days", "Select at least one day for this period.");
+      return;
+    }
     const nextPeriod = {
       subject: draft.subject.trim(),
       teacherId: draft.teacherId,
@@ -394,31 +522,70 @@ export default function TimetableScreen() {
       startTime: draft.startTime,
       endTime: draft.endTime,
     };
-    const updatedPeriods =
-      draft.index === undefined
-        ? [...currentPeriods, nextPeriod]
-        : currentPeriods.map((period, index) =>
-            index === draft.index ? nextPeriod : period,
-          );
     setSaving(true);
+    setPeriodSaveErrors([]);
+    setPeriodConflicts([]);
+    setPeriodSaveNotice("");
+    const savedDays: string[] = [];
+    const failedDays: { day: string; message: string }[] = [];
     try {
-      const response = await api.timetable.save({
-        class: className,
-        section,
-        day: draft.day,
-        periods: updatedPeriods.sort((a, b) =>
+      for (const day of targetDays) {
+        const currentSlot = slots.find((slot) => slot.day === day);
+        const currentPeriods = [...((currentSlot?.periods as Row[]) || [])].sort((a, b) =>
           String(a.startTime || "").localeCompare(String(b.startTime || "")),
-        ),
-      });
-      setSlots((current) => [
-        ...current.filter((slot) => slot.day !== draft.day),
-        response.data,
-      ]);
-      setDraft(null);
-      Alert.alert(
-        "Timetable saved",
-        draft.index === undefined ? "Period added." : "Period updated.",
-      );
+        );
+        const updatedPeriods =
+          draft.index === undefined
+            ? [...currentPeriods, nextPeriod]
+            : currentPeriods.map((period, index) =>
+                index === draft.index ? nextPeriod : period,
+              );
+        try {
+          const response = await api.timetable.save({
+            class: className,
+            section,
+            day,
+            periods: updatedPeriods.sort((a, b) =>
+              String(a.startTime || "").localeCompare(String(b.startTime || "")),
+            ),
+          });
+          setSlots((current) => [
+            ...current.filter((slot) => slot.day !== day),
+            response.data,
+          ]);
+          savedDays.push(day);
+        } catch (error) {
+          const requestError = error as Error & { conflicts?: string[] };
+          failedDays.push({ day, message: requestError.message });
+          if (requestError.conflicts?.length) {
+            setPeriodConflicts((current) => [
+              ...current,
+              ...requestError.conflicts!.map((conflict) => `${day}: ${conflict}`),
+            ]);
+          }
+        }
+      }
+      if (failedDays.length) {
+        setPeriodSaveNotice(
+          savedDays.length
+            ? `Saved successfully on ${savedDays.join(", ")}. Retry the remaining days below.`
+            : "",
+        );
+        setPeriodSaveErrors(failedDays.map(({ day, message }) => `${day}: ${message}`));
+        setDraft((current) =>
+          current
+            ? { ...current, day: failedDays[0].day, days: failedDays.map((item) => item.day) }
+            : current,
+        );
+      } else {
+        setDraft(null);
+        Alert.alert(
+          "Timetable saved",
+          draft.index === undefined
+            ? `Period added on ${savedDays.join(", ")}.`
+            : "Period updated.",
+        );
+      }
     } catch (saveError) {
       Alert.alert(
         "Could not save period",
@@ -477,6 +644,80 @@ export default function TimetableScreen() {
         },
       ],
     );
+  };
+  const openCopyDay = (day: string) => {
+    if (!periodsForDay(day).length) {
+      Alert.alert("No periods to copy", `Add periods to ${day} first.`);
+      return;
+    }
+    setCopySource(day);
+    setCopyTargets(
+      DAYS.filter((target) => target !== day && !periodsForDay(target).length),
+    );
+    setCopyOverwrite(false);
+    setCopyErrors([]);
+    setCopyNotice("");
+  };
+  const toggleCopyTarget = (day: string) => {
+    setCopyTargets((current) =>
+      current.includes(day)
+        ? current.filter((item) => item !== day)
+        : [...current, day],
+    );
+  };
+  const copyDaySchedule = async () => {
+    if (!copySource || !copyTargets.length) {
+      Alert.alert("Choose days", "Select at least one day to copy this timetable to.");
+      return;
+    }
+    const sourcePeriods = periodsForDay(copySource);
+    if (!sourcePeriods.length) {
+      Alert.alert("No periods to copy", `Add periods to ${copySource} first.`);
+      setCopySource("");
+      return;
+    }
+    setCopyBusy(true);
+    setCopyErrors([]);
+    setCopyNotice("");
+    const copied: string[] = [];
+    const failed: { day: string; message: string }[] = [];
+    try {
+      for (const day of copyTargets) {
+        try {
+          const response = await api.timetable.save({
+            class: className,
+            section,
+            day,
+            periods: sourcePeriods,
+          });
+          setSlots((current) => [
+            ...current.filter((slot) => slot.day !== day),
+            response.data,
+          ]);
+          copied.push(day);
+        } catch (requestError) {
+          const error = requestError as Error & { conflicts?: string[] };
+          failed.push({ day, message: error.message });
+        }
+      }
+      if (failed.length) {
+        setCopyErrors(failed.map(({ day, message }) => `${day}: ${message}`));
+        setCopyTargets(failed.map(({ day }) => day));
+        setCopyNotice(
+          copied.length
+            ? `Copied successfully to ${copied.join(", ")}. Retry the remaining days.`
+            : "",
+        );
+      } else {
+        setCopySource("");
+        Alert.alert(
+          "Timetable copied",
+          `Copied ${copySource} to ${copied.join(", ")}.`,
+        );
+      }
+    } finally {
+      setCopyBusy(false);
+    }
   };
   const substitutionDay = dayForDate(substitutionDate);
   const substitutionPeriods = useMemo(() => {
@@ -636,7 +877,17 @@ export default function TimetableScreen() {
 
   const choiceOptions =
     choicePicker === "subject"
-      ? subjects
+      ? [
+          ...subjects.filter(
+            (item, index, all) =>
+              all.findIndex(
+                (candidate) =>
+                  candidate.name.trim().toLowerCase() ===
+                  item.name.trim().toLowerCase(),
+              ) === index,
+          ),
+          ...NON_ACADEMIC_SUBJECTS,
+        ]
       : choicePicker === "teacher"
         ? teachers
         : choicePicker === "substitute-teacher"
@@ -761,7 +1012,12 @@ export default function TimetableScreen() {
         {can("timetable:read") && className && section ? (
           <Card style={styles.substitutionCard}>
             <View style={styles.substitutionHeading}>
-              <View style={styles.substitutionTitleRow}>
+              <Pressable
+                style={styles.substitutionTitleRow}
+                onPress={() => setSubstitutionExpanded((expanded) => !expanded)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: substitutionExpanded }}
+              >
                 <View style={styles.substitutionIcon}>
                   <Ionicons
                     name="people-outline"
@@ -771,11 +1027,14 @@ export default function TimetableScreen() {
                 </View>
                 <View style={styles.headingCopy}>
                   <Text style={styles.substitutionTitle}>Substitutions</Text>
-                  <Text style={styles.subtitle}>
-                    Teacher coverage for Class {className} · Section {section}
-                  </Text>
+                  <Text style={styles.subtitle}>Teacher coverage and changes</Text>
                 </View>
-              </View>
+                <Ionicons
+                  name={substitutionExpanded ? "chevron-up" : "chevron-down"}
+                  size={17}
+                  color={colors.muted}
+                />
+              </Pressable>
               {canWrite ? (
                 <Pressable
                   style={styles.newSubstitutionButton}
@@ -787,6 +1046,8 @@ export default function TimetableScreen() {
                 </Pressable>
               ) : null}
             </View>
+            {substitutionExpanded ? (
+              <>
             <View style={styles.substitutionDateRow}>
               <View style={styles.dateInputWrap}>
                 <Ionicons name="calendar-outline" size={16} color={colors.muted} />
@@ -948,32 +1209,9 @@ export default function TimetableScreen() {
                 No substitutions scheduled for {substitutionDate}.
               </Text>
             )}
+              </>
+            ) : null}
           </Card>
-        ) : null}
-
-        <View style={styles.summary}>
-          <View style={styles.summaryIcon}>
-            <Ionicons name="time-outline" size={17} color={colors.info} />
-          </View>
-          <Text style={styles.summaryText}>
-            {loading ? "Loading schedule…" : `${totalPeriods} periods this week`}
-          </Text>
-          {!loading && className && section ? (
-            <Text style={styles.summaryClass}>
-              {className} · {section}
-            </Text>
-          ) : null}
-        </View>
-
-        {canWrite && className && section ? (
-          <Pressable
-            style={styles.addPeriodButton}
-            onPress={openAddToday}
-            disabled={saving}
-          >
-            <Ionicons name="add-circle-outline" size={19} color="#fff" />
-            <Text style={styles.addPeriodButtonText}>Add Period</Text>
-          </Pressable>
         ) : null}
 
         {loading || loadingMasters ? (
@@ -991,34 +1229,75 @@ export default function TimetableScreen() {
         ) : !className || !section ? (
           <Empty text="Choose a class and section to view the timetable." />
         ) : (
-          <View style={styles.weekList}>
-            {DAYS.map((selectedDay) => {
+          <Card style={styles.weekList}>
+            <View style={styles.weekCardHeader}>
+              <View style={styles.summaryIcon}>
+                <Ionicons name="time-outline" size={18} color={colors.info} />
+              </View>
+              <View style={styles.weekCardHeading}>
+                <Text style={styles.weekCardTitle}>Weekly timetable</Text>
+                <Text style={styles.weekCardSubtitle}>
+                  Class {className} · Section {section} · {totalPeriods} periods
+                </Text>
+              </View>
+              {canWrite ? (
+                <Pressable
+                  style={styles.addDayButton}
+                  onPress={openAddToday}
+                  disabled={saving}
+                >
+                  <Ionicons name="add" size={19} color={colors.ink} />
+                  <Text style={styles.addDayText}>Add</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {DAYS.map((selectedDay, dayIndex) => {
               const dayPeriods = periodsForDay(selectedDay);
+              const dayColor = DAY_COLORS[dayIndex];
               return (
-                <Card key={selectedDay} style={styles.dayCard}>
+                <View
+                  key={selectedDay}
+                  style={[
+                    styles.daySection,
+                    dayIndex > 0 && styles.daySectionDivider,
+                  ]}
+                >
                   <View style={styles.dayCardHeader}>
-                    <View style={styles.dayHeadingIcon}>
-                      <Ionicons
-                        name="sunny-outline"
-                        size={17}
-                        color={colors.amberDark}
-                      />
+                    <View style={[styles.dayHeadingIcon, { backgroundColor: `${dayColor}18` }]}>
+                      <Ionicons name="calendar-outline" size={17} color={dayColor} />
                     </View>
                     <View style={styles.dayHeadingCopy}>
-                      <Text style={styles.dayTitle}>{selectedDay}</Text>
+                      <View style={styles.dayTitleRow}>
+                        <Text style={styles.dayTitle}>{selectedDay}</Text>
+                        {selectedDay === WEEKDAY_NAMES[new Date().getDay()] ? (
+                          <Text style={styles.todayBadge}>TODAY</Text>
+                        ) : null}
+                      </View>
                       <Text style={styles.daySubtitle}>
                         {dayPeriods.length} period{dayPeriods.length === 1 ? "" : "s"} scheduled
                       </Text>
                     </View>
                     {canWrite ? (
-                      <Pressable
-                        style={styles.addDayButton}
-                        onPress={() => openAddPeriod(selectedDay)}
-                        accessibilityLabel={`Add period on ${selectedDay}`}
-                      >
-                        <Ionicons name="add" size={19} color={colors.ink} />
-                        <Text style={styles.addDayText}>Add</Text>
-                      </Pressable>
+                      <View style={styles.dayHeaderActions}>
+                        {dayPeriods.length ? (
+                          <Pressable
+                            style={styles.dayIconAction}
+                            onPress={() => openCopyDay(selectedDay)}
+                            disabled={saving || copyBusy}
+                            accessibilityLabel={`Copy ${selectedDay} schedule`}
+                          >
+                            <Ionicons name="copy-outline" size={16} color={colors.ink} />
+                          </Pressable>
+                        ) : null}
+                        <Pressable
+                          style={styles.addDayButton}
+                          onPress={() => openAddPeriod(selectedDay)}
+                          accessibilityLabel={`Add period on ${selectedDay}`}
+                        >
+                          <Ionicons name="add" size={19} color={colors.ink} />
+                          <Text style={styles.addDayText}>Add</Text>
+                        </Pressable>
+                      </View>
                     ) : null}
                   </View>
                   {dayPeriods.length ? (
@@ -1037,7 +1316,7 @@ export default function TimetableScreen() {
                               {formatTime(period.endTime)}
                             </Text>
                           </View>
-                          <View style={styles.periodDivider} />
+                          <View style={[styles.periodDivider, { backgroundColor: dayColor }]} />
                           <View style={styles.periodDetails}>
                             <Text style={styles.periodNumber}>PERIOD {index + 1}</Text>
                             <Text style={styles.subject}>
@@ -1108,10 +1387,10 @@ export default function TimetableScreen() {
                         : "No periods scheduled."}
                     </Text>
                   )}
-                </Card>
+                </View>
               );
             })}
-          </View>
+          </Card>
         )}
       </ScrollView>
 
@@ -1194,25 +1473,70 @@ export default function TimetableScreen() {
                 contentContainerStyle={styles.formContent}
                 keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.formLabel}>Day</Text>
+                {periodSaveNotice ? (
+                  <View style={styles.saveNoticeBox}>
+                    <Ionicons name="checkmark-circle-outline" size={17} color={colors.success} />
+                    <Text style={styles.saveNoticeText}>{periodSaveNotice}</Text>
+                  </View>
+                ) : null}
+                {periodConflicts.length > 0 || periodSaveErrors.length > 0 ? (
+                  <View style={styles.saveErrorBox}>
+                    <View style={styles.saveErrorHeading}>
+                      <Ionicons name="warning-outline" size={17} color={colors.alert} />
+                      <Text style={styles.saveErrorTitle}>
+                        Could not save every selected day
+                      </Text>
+                    </View>
+                    {[...periodConflicts, ...periodSaveErrors].map((message, index) => (
+                      <Text key={`${index}-${message}`} style={styles.saveErrorText}>
+                        {message}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+                <View style={styles.dayLabelRow}>
+                  <Text style={styles.formLabel}>
+                    {draft.index === undefined ? "Repeat on days" : "Day"}
+                  </Text>
+                  {draft.index === undefined ? (
+                    <View style={styles.dayQuickActions}>
+                      <Pressable
+                        onPress={() =>
+                          setDraft((current) => current
+                            ? { ...current, days: [...DAYS], day: current.day }
+                            : current)
+                        }
+                      >
+                        <Text style={styles.dayQuickActionText}>All days</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() =>
+                          setDraft((current) => current
+                            ? { ...current, days: [] }
+                            : current)
+                        }
+                      >
+                        <Text style={styles.dayQuickActionText}>Clear</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
                 <View style={styles.dayChoices}>
                   {DAYS.map((name) => (
                     <Pressable
                       key={name}
                       style={[
                         styles.dayChoice,
-                        draft.day === name && styles.dayChoiceActive,
+                        draft.days.includes(name) && styles.dayChoiceActive,
+                        draft.index !== undefined && styles.dayChoiceLocked,
                       ]}
-                      onPress={() =>
-                        setDraft((current) =>
-                          current ? { ...current, day: name } : current,
-                        )
-                      }
+                      disabled={saving || draft.index !== undefined}
+                      onPress={() => toggleDraftDay(name)}
                     >
                       <Text
                         style={[
                           styles.dayChoiceText,
-                          draft.day === name && styles.dayChoiceTextActive,
+                          draft.days.includes(name) && styles.dayChoiceTextActive,
                         ]}
                       >
                         {name.slice(0, 3)}
@@ -1220,6 +1544,11 @@ export default function TimetableScreen() {
                     </Pressable>
                   ))}
                 </View>
+                {draft.index === undefined ? (
+                  <Text style={styles.formHint}>
+                    Choose every day this lesson repeats. The selected days will be saved together.
+                  </Text>
+                ) : null}
                 <Text style={styles.formLabel}>Subject</Text>
                 <View style={styles.formPickerRow}>
                   <Input
@@ -1232,14 +1561,13 @@ export default function TimetableScreen() {
                     placeholder="Enter subject"
                     style={styles.formInput}
                   />
-                  {subjects.length ? (
-                    <Pressable
-                      style={styles.pickButton}
-                      onPress={() => setChoicePicker("subject")}
-                    >
-                      <Ionicons name="list-outline" size={19} color={colors.ink} />
-                    </Pressable>
-                  ) : null}
+                  <Pressable
+                    style={styles.pickButton}
+                    onPress={() => setChoicePicker("subject")}
+                    accessibilityLabel="Choose from subjects"
+                  >
+                    <Ionicons name="list-outline" size={19} color={colors.ink} />
+                  </Pressable>
                 </View>
                 <Text style={styles.formLabel}>Teacher (optional)</Text>
                 <Pressable
@@ -1294,13 +1622,147 @@ export default function TimetableScreen() {
                 <Pressable
                   style={[styles.saveButton, saving && styles.buttonDisabled]}
                   onPress={() => void savePeriod()}
-                  disabled={saving}
+                  disabled={saving || (draft.index === undefined && draft.days.length === 0)}
                 >
                   {saving ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <Text style={styles.saveButtonText}>
-                      {draft.index === undefined ? "Add period" : "Save changes"}
+                      {saving
+                        ? "Saving…"
+                        : draft.index === undefined
+                          ? `Add period${draft.days.length > 1 ? ` to ${draft.days.length} days` : ""}`
+                          : "Save changes"}
+                    </Text>
+                  )}
+                </Pressable>
+              </ScrollView>
+            </View>
+          </View>
+        ) : null}
+      </Modal>
+      <Modal
+        visible={Boolean(copySource)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !copyBusy && setCopySource("")}
+      >
+        {copySource ? (
+          <View style={styles.modalBackdrop}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => !copyBusy && setCopySource("")}
+            />
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <View style={styles.headingCopy}>
+                  <Text style={styles.modalTitle}>Copy day schedule</Text>
+                  <Text style={styles.muted}>
+                    Copy {copySource} periods to another day
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => !copyBusy && setCopySource("")}
+                  disabled={copyBusy}
+                  hitSlop={10}
+                >
+                  <Ionicons name="close" size={22} color={colors.ink} />
+                </Pressable>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.formContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {copyNotice ? (
+                  <View style={styles.saveNoticeBox}>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={17}
+                      color={colors.success}
+                    />
+                    <Text style={styles.saveNoticeText}>{copyNotice}</Text>
+                  </View>
+                ) : null}
+                {copyErrors.length ? (
+                  <View style={styles.saveErrorBox}>
+                    <Text style={styles.saveErrorTitle}>
+                      Some days could not be copied
+                    </Text>
+                    {copyErrors.map((message) => (
+                      <Text key={message} style={styles.saveErrorText}>
+                        {message}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+                <Text style={styles.formLabel}>Choose destination days</Text>
+                {DAYS.filter((day) => day !== copySource).map((day) => {
+                  const hasSchedule = periodsForDay(day).length > 0;
+                  const disabled = hasSchedule && !copyOverwrite;
+                  const checked = copyTargets.includes(day);
+                  return (
+                    <Pressable
+                      key={day}
+                      style={[
+                        styles.copyTarget,
+                        checked && styles.copyTargetSelected,
+                        disabled && styles.copyTargetDisabled,
+                      ]}
+                      disabled={copyBusy || disabled}
+                      onPress={() => toggleCopyTarget(day)}
+                    >
+                      <View style={styles.copyTargetCopy}>
+                        <Text style={styles.copyTargetDay}>{day}</Text>
+                        <Text style={styles.copyTargetMeta}>
+                          {hasSchedule
+                            ? `${periodsForDay(day).length} current period(s)${copyOverwrite ? " · will be replaced" : ""}`
+                            : "Empty day"}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={checked ? "checkbox" : disabled ? "lock-closed-outline" : "square-outline"}
+                        size={21}
+                        color={checked ? colors.ink : colors.muted}
+                      />
+                    </Pressable>
+                  );
+                })}
+                {DAYS.some((day) => day !== copySource && periodsForDay(day).length > 0) ? (
+                  <Pressable
+                    style={styles.overwriteToggle}
+                    onPress={() => {
+                      setCopyOverwrite((current) => !current);
+                      if (copyOverwrite) {
+                        setCopyTargets((current) =>
+                          current.filter((day) => !periodsForDay(day).length),
+                        );
+                      }
+                    }}
+                    disabled={copyBusy}
+                  >
+                    <Ionicons
+                      name={copyOverwrite ? "checkbox" : "square-outline"}
+                      size={20}
+                      color={copyOverwrite ? colors.alert : colors.muted}
+                    />
+                    <Text style={styles.overwriteText}>
+                      Allow replacing destination days that already have periods
+                    </Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  style={[
+                    styles.saveButton,
+                    (copyBusy || !copyTargets.length) && styles.buttonDisabled,
+                  ]}
+                  onPress={() => void copyDaySchedule()}
+                  disabled={copyBusy || !copyTargets.length}
+                >
+                  {copyBusy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>
+                      Copy to {copyTargets.length} day{copyTargets.length === 1 ? "" : "s"}
                     </Text>
                   )}
                 </Pressable>
@@ -1441,7 +1903,11 @@ export default function TimetableScreen() {
           <View style={styles.choiceSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                Select {choicePicker || "value"}
+                {choicePicker === "subject"
+                  ? "Choose a subject"
+                  : choicePicker === "substitute-teacher"
+                    ? "Choose substitute teacher"
+                    : `Select ${choicePicker || "value"}`}
               </Text>
               <Pressable onPress={() => setChoicePicker(null)} hitSlop={10}>
                 <Ionicons name="close" size={22} color={colors.ink} />
@@ -1503,7 +1969,7 @@ export default function TimetableScreen() {
                       ? "No teachers are available."
                       : choicePicker === "room"
                         ? "No rooms are configured. You can leave the room unassigned."
-                        : "No subjects are configured. You can enter a subject manually."}
+                        : "No options are available. Enter a subject manually or use a standard activity."}
                 </Text>
               ) : null}
             </ScrollView>
@@ -1679,24 +2145,87 @@ const styles = StyleSheet.create({
   },
   classContextText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   summary: {
-    minHeight: 42,
+    minHeight: 54,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
+    gap: 10,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#E8ECF2",
     backgroundColor: "#fff",
   },
   summaryIcon: {
-    width: 27,
-    height: 27,
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#EAF2F9",
   },
-  summaryText: { flex: 1, color: colors.ink, fontSize: 11, fontWeight: "700" },
-  summaryClass: { color: colors.muted, fontSize: 10, fontWeight: "600" },
+  summaryText: { flex: 1, color: colors.ink, fontSize: 12, fontWeight: "800" },
+  summaryClass: { color: colors.muted, fontSize: 10, fontWeight: "700" },
+  weekCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E9EDF2",
+  },
+  weekCardHeading: { flex: 1, gap: 3 },
+  weekCardTitle: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  weekCardSubtitle: { color: colors.muted, fontSize: 10, fontWeight: "600" },
+  daySection: { gap: 9, paddingTop: 13, paddingBottom: 12 },
+  daySectionDivider: {
+    borderTopWidth: 1,
+    borderTopColor: "#E9EDF2",
+  },
+  dayHeaderActions: { flexDirection: "row", alignItems: "center", gap: 6 },
+  dayIconAction: {
+    width: 31,
+    height: 31,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    backgroundColor: "#F1F3F7",
+  },
+  weekSelector: {
+    gap: 8,
+    padding: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#E8ECF2",
+    backgroundColor: "#fff",
+  },
+  weekSelectorTitle: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  weekDayList: { gap: 8, paddingRight: 2 },
+  weekDay: {
+    width: 53,
+    minHeight: 61,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#E8ECF2",
+    backgroundColor: "#F8F9FB",
+  },
+  weekDayActive: {
+    borderColor: colors.ink,
+    backgroundColor: colors.ink,
+  },
+  weekDayLabelRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  weekDayLabel: { color: colors.muted, fontSize: 9, fontWeight: "900" },
+  weekDayLabelActive: { color: "#fff" },
+  weekDayCount: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  weekDayCountActive: { color: "#fff" },
+  todayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.success },
   addPeriodButton: {
     minHeight: 42,
     flexDirection: "row",
@@ -1707,8 +2236,29 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
   },
   addPeriodButtonText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  scheduleActions: { flexDirection: "row", gap: 8 },
+  scheduleActionPrimary: { flex: 1 },
+  copyDayButton: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+  },
+  copyDayButtonText: { color: colors.ink, fontSize: 11, fontWeight: "800" },
   weekList: { gap: 10 },
-  dayCard: { padding: 12, gap: 8 },
+  dayCard: {
+    padding: 14,
+    gap: 11,
+    borderColor: "#E6EAF0",
+    borderRadius: 15,
+    backgroundColor: "#fff",
+  },
   dayCardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   dayHeadingCopy: { flex: 1 },
   dayHeading: {
@@ -1718,8 +2268,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingTop: 3,
   },
-  dayTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-  daySubtitle: { color: colors.muted, fontSize: 10, marginTop: 2 },
+  dayTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  dayTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  todayBadge: {
+    overflow: "hidden",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: "#E9F6EF",
+    color: colors.success,
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+  daySubtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
   addDayButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1739,22 +2301,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   loading: { marginTop: 25 },
-  periodList: { gap: 7 },
+  periodList: { gap: 8 },
   periodRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingTop: 9,
-    borderTopWidth: 1,
-    borderTopColor: "#EEF0F3",
+    gap: 9,
+    minHeight: 82,
+    padding: 9,
+    borderWidth: 1,
+    borderColor: "#EDF0F4",
+    borderRadius: 12,
+    backgroundColor: "#FCFCFD",
   },
-  periodTimeline: { width: 63, gap: 3, alignItems: "flex-end" },
-  periodStart: { color: colors.ink, fontSize: 11, fontWeight: "800" },
-  timelineRule: { width: 30, height: 1, backgroundColor: colors.amber },
-  periodEnd: { color: colors.muted, fontSize: 10 },
-  periodDivider: { width: 2, alignSelf: "stretch", borderRadius: 2, backgroundColor: colors.amber },
-  periodDetails: { flex: 1, gap: 3 },
-  periodActions: { gap: 4 },
+  periodTimeline: {
+    width: 65,
+    minHeight: 56,
+    gap: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    backgroundColor: "#F0F3F8",
+  },
+  periodStart: { color: colors.ink, fontSize: 10, fontWeight: "900" },
+  timelineRule: { width: 22, height: 2, borderRadius: 1, backgroundColor: colors.amber },
+  periodEnd: { color: colors.muted, fontSize: 9, fontWeight: "700" },
+  periodDivider: { width: 3, alignSelf: "stretch", borderRadius: 3, backgroundColor: colors.amber },
+  periodDetails: { flex: 1, gap: 4 },
+  periodActions: { gap: 5 },
   periodAction: {
     width: 30,
     height: 30,
@@ -1772,10 +2345,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   periodNumber: { color: colors.muted, fontSize: 8, fontWeight: "800", letterSpacing: 0.7 },
-  subject: { color: colors.ink, fontSize: 14, fontWeight: "800" },
-  periodMeta: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 2 },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  metaText: { color: colors.muted, fontSize: 10 },
+  subject: { color: colors.ink, fontSize: 14, fontWeight: "900" },
+  periodMeta: { flexDirection: "column", flexWrap: "wrap", gap: 4, marginTop: 1 },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  metaText: { color: colors.muted, fontSize: 10, flexShrink: 1 },
   errorCard: { padding: 13, borderColor: colors.alert, gap: 8 },
   errorText: { color: colors.alert, fontSize: 11, lineHeight: 16 },
   retryButton: { alignSelf: "flex-start", paddingVertical: 5, paddingHorizontal: 8 },
@@ -1799,6 +2372,62 @@ const styles = StyleSheet.create({
   modalTitle: { color: colors.ink, fontSize: 17, fontWeight: "800", marginBottom: 3 },
   formContent: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 20, gap: 9 },
   formLabel: { color: colors.ink, fontSize: 11, fontWeight: "700", marginTop: 3 },
+  dayLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dayQuickActions: { flexDirection: "row", alignItems: "center", gap: 14 },
+  dayQuickActionText: { color: colors.info, fontSize: 10, fontWeight: "800" },
+  formHint: { color: colors.muted, fontSize: 10, lineHeight: 15 },
+  copyTarget: {
+    minHeight: 53,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+  },
+  copyTargetSelected: {
+    borderColor: colors.info,
+    backgroundColor: "#F5F9FC",
+  },
+  copyTargetDisabled: { opacity: 0.6 },
+  copyTargetCopy: { flex: 1, gap: 3 },
+  copyTargetDay: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+  copyTargetMeta: { color: colors.muted, fontSize: 10 },
+  overwriteToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 5,
+  },
+  overwriteText: { flex: 1, color: colors.text, fontSize: 10, lineHeight: 15 },
+  saveErrorBox: {
+    gap: 5,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#F0C8C2",
+    borderRadius: 10,
+    backgroundColor: "#FFF7F5",
+  },
+  saveNoticeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "#E9F6EF",
+  },
+  saveNoticeText: { flex: 1, color: colors.success, fontSize: 10, lineHeight: 15, fontWeight: "700" },
+  saveErrorHeading: { flexDirection: "row", alignItems: "center", gap: 6 },
+  saveErrorTitle: { flex: 1, color: colors.alert, fontSize: 11, fontWeight: "800" },
+  saveErrorText: { color: colors.alert, fontSize: 10, lineHeight: 15 },
   substitutionPeriodChoices: { gap: 7 },
   substitutionPeriodChoice: {
     gap: 4,
@@ -1828,6 +2457,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   dayChoiceActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  dayChoiceLocked: { opacity: 0.85 },
   dayChoiceText: { color: colors.ink, fontSize: 10, fontWeight: "700" },
   dayChoiceTextActive: { color: "#fff" },
   formPickerRow: { flexDirection: "row", alignItems: "center", gap: 7 },
