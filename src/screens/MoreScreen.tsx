@@ -30,6 +30,9 @@ export default function MoreScreen() {
           can("attendance:mark") ||
           can("students:write") ||
           can("marks:write") ||
+          can("library:read") ||
+          can("promotion:read") ||
+          can("promotion:write") ||
           can("notices:read") ||
           can("notices:publish") ||
           (isSchoolAdmin && can("staff:read")) ||
@@ -132,6 +135,21 @@ export default function MoreScreen() {
                   <Text style={s.label}>Grading Scales</Text>
                 </Pressable>
               )}
+              {(can("promotion:read") || can("promotion:write")) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Promotions")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="school"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Promotions</Text>
+                </Pressable>
+              )}
               {(can("marks:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
@@ -145,6 +163,36 @@ export default function MoreScreen() {
                     />
                   </View>
                   <Text style={s.label}>Report Card</Text>
+                </Pressable>
+              )}
+              {(can("homework:read") || isStudent) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Syllabus")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="book"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Syllabus</Text>
+                </Pressable>
+              )}
+              {isStudent && can("library:read") && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Library")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="library"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Library</Text>
                 </Pressable>
               )}
               {can("marks:write") && (

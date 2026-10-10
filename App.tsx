@@ -40,6 +40,9 @@ import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
 import TimetableScreen from "./src/screens/TimetableScreen";
 import ReportCardScreen from "./src/screens/ReportCardScreen";
 import GradingScalesScreen from "./src/screens/GradingScalesScreen";
+import SyllabusScreen from "./src/screens/SyllabusScreen";
+import LibraryScreen from "./src/screens/LibraryScreen";
+import PromotionsScreen from "./src/screens/PromotionsScreen";
 import {
   NotificationsProvider,
   useNotifications,
@@ -74,6 +77,9 @@ export type RootStackParams = {
   Timetable: undefined;
   ReportCard: undefined;
   GradingScales: undefined;
+  Syllabus: undefined;
+  Library: undefined;
+  Promotions: undefined;
   BusTracking: undefined;
   IdCard: undefined;
   UploadDocument: undefined;
@@ -306,6 +312,21 @@ function Root() {
         name="GradingScales"
         component={GradingScalesScreen}
         options={{ title: "Grading Scales" }}
+      />
+      <Stack.Screen
+        name="Syllabus"
+        component={SyllabusScreen}
+        options={{ title: "Syllabus" }}
+      />
+      <Stack.Screen
+        name="Library"
+        component={LibraryScreen}
+        options={{ title: "My Library" }}
+      />
+      <Stack.Screen
+        name="Promotions"
+        component={PromotionsScreen}
+        options={{ title: "Promotions" }}
       />
       <Stack.Screen
         name="BusTracking"
