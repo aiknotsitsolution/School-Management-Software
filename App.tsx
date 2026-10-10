@@ -61,6 +61,8 @@ import HomeworkScreen from "./src/screens/HomeworkScreen";
 import LeaveScreen from "./src/screens/LeaveScreen";
 import PayrollScreen from "./src/screens/PayrollScreen";
 import OnlinePaymentScreen from "./src/screens/OnlinePaymentScreen";
+import ReportsScreen from "./src/screens/ReportsScreen";
+import BranchesScreen from "./src/screens/BranchesScreen";
 import { colors } from "./src/theme";
 
 export type RootStackParams = {
@@ -106,6 +108,8 @@ export type RootStackParams = {
   Leave: undefined;
   Payroll: undefined;
   OnlinePayment: undefined;
+  SchoolReports: undefined;
+  Branches: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -292,6 +296,11 @@ function Root() {
         options={{ title: "Manage School" }}
       />
       <Stack.Screen
+        name="Branches"
+        component={BranchesScreen}
+        options={{ title: "Branches" }}
+      />
+      <Stack.Screen
         name="Subscription"
         component={SubscriptionScreen}
         options={{ title: "Subscription & Upgrade" }}
@@ -419,6 +428,11 @@ function Root() {
         name="OnlinePayment"
         component={OnlinePaymentScreen}
         options={{ title: "Online Fees Payment" }}
+      />
+      <Stack.Screen
+        name="SchoolReports"
+        component={ReportsScreen}
+        options={{ title: "Reports & Analytics" }}
       />
     </Stack.Navigator>
   );

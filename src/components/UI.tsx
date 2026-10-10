@@ -23,20 +23,23 @@ export function Button({
   title,
   onPress,
   loading,
+  disabled,
   variant = "primary",
 }: {
   title: string;
   onPress: () => void;
   loading?: boolean;
+  disabled?: boolean;
   variant?: "primary" | "ghost";
 }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={loading}
+      disabled={loading || disabled}
       style={({ pressed }) => [
         s.btn,
         variant === "ghost" && s.ghost,
+        (loading || disabled) && { opacity: 0.55 },
         pressed && { opacity: 0.85 },
       ]}
     >

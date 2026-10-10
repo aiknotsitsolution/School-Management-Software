@@ -47,6 +47,8 @@ export default function MoreScreen() {
           can("notices:publish") ||
           can("leaves:apply") ||
           can("staff:read") ||
+          can("reports:view") ||
+          can("fees:reports") ||
           (isSchoolAdmin && can("fees:read")) ||
           can("enquiries:write")) && (
           <View>
@@ -479,35 +481,82 @@ export default function MoreScreen() {
                 <Text style={s.label}>Events</Text>
               </Pressable>
             )}
+            {!isStudent &&
+              (can("reports:view") ||
+                can("fees:reports") ||
+                can("students:read") ||
+                can("attendance:read") ||
+                can("attendance:mark") ||
+                can("fees:read") ||
+                can("enquiries:read") ||
+                can("enquiries:write") ||
+                can("staff:read")) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("SchoolReports")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="bar-chart"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Reports & Analytics</Text>
+                </Pressable>
+              )}
           </View>
         </View>
       )}
-      {isSchoolAdmin && can("school:settings") ? (
+      {can("school:settings") || can("branches:read") ? (
         <View>
           <Text style={s.group}>School administration</Text>
           <View style={s.grid}>
-            <Pressable
-              style={s.tile}
-              onPress={() => nav.navigate("ManageSchool")}
-            >
-              <View style={s.icon}>
-                <Ionicons name="settings" size={22} color={colors.amberDark} />
-              </View>
-              <Text style={s.label}>Manage School</Text>
-            </Pressable>
-            <Pressable
-              style={s.tile}
-              onPress={() => nav.navigate("Subscription")}
-            >
-              <View style={s.icon}>
-                <Ionicons
-                  name="card-outline"
-                  size={22}
-                  color={colors.amberDark}
-                />
-              </View>
-              <Text style={s.label}>Subscription</Text>
-            </Pressable>
+            {can("school:settings") ? (
+              <>
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("ManageSchool")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="settings"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Manage School</Text>
+                </Pressable>
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Subscription")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="card-outline"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Subscription</Text>
+                </Pressable>
+              </>
+            ) : null}
+            {can("branches:read") ? (
+              <Pressable
+                style={s.tile}
+                onPress={() => nav.navigate("Branches")}
+              >
+                <View style={s.icon}>
+                  <Ionicons
+                    name="business-outline"
+                    size={22}
+                    color={colors.amberDark}
+                  />
+                </View>
+                <Text style={s.label}>Branches</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       ) : null}

@@ -130,10 +130,30 @@ export default function OnlinePaymentScreen() {
           "Your account does not have access to the student fee portal.",
         );
       }
-      const invoiceResponse = await api.fees.invoices.list("limit=1000");
+      const loadedInvoices: FeeInvoiceRecord[] = [];
+      let hasMoreInvoices = false;
+      for (let page = 1; page <= 10; page += 1) {
+        const invoiceResponse = await api.fees.invoices.list(
+          `limit=1000&page=${page}`,
+        );
+        const batch = invoiceResponse.data || [];
+        loadedInvoices.push(...batch);
+        const reportedPages = Number(invoiceResponse.pages);
+        hasMoreInvoices =
+          batch.length === 1000 &&
+          (!Number.isFinite(reportedPages) ||
+            reportedPages <= 0 ||
+            page < reportedPages);
+        if (!hasMoreInvoices) break;
+      }
+      if (hasMoreInvoices) {
+        throw new Error(
+          "More than 10,000 invoices are available. Apply a narrower search in the school portal before using online payments.",
+        );
+      }
       const loadedStudents = studentResponse.data || [];
       setStudents(loadedStudents);
-      setInvoices(invoiceResponse.data || []);
+      setInvoices(loadedInvoices);
       setSelectedStudent((current) => {
         if (
           current &&

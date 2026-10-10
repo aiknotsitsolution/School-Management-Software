@@ -5,14 +5,19 @@ import type {
   ApiResponse,
   AdmissionEnquiry,
   AttendanceRecord,
+  AttendanceSummaryReport,
+  Branch,
+  BranchQuota,
   BroadcastLog,
   BroadcastResult,
   Conversation,
   ConversationPerson,
   FeeInvoice,
   FeeInvoiceRecord,
+  FeePlan,
   FeePaymentOrder,
   FeePayment,
+  FeeReportsSummary,
   FeeReconciliation,
   FeeStructure,
   LeaveBalance,
@@ -148,8 +153,12 @@ async function request<T>(
     const err = new Error(body.message || statusMessage) as Error & {
       status?: number;
       conflicts?: string[];
+      code?: string;
+      data?: Record<string, unknown>;
     };
     err.status = res.status;
+    if (typeof body.code === "string") err.code = body.code;
+    if (body.data && typeof body.data === "object") err.data = body.data;
     if (Array.isArray(body.conflicts)) {
       err.conflicts = body.conflicts.map(String);
     }
@@ -199,7 +208,11 @@ export const api = {
     uploadPhoto: (form: FormData) =>
       uploadForm<{ url: string }>("/students/upload-photo", form),
     stats: () =>
-      request<{ total: number; active: number }>("/students/stats/summary"),
+      request<{
+        total: number;
+        active: number;
+        byClass?: { _id?: string; count?: number }[];
+      }>("/students/stats/summary"),
     pendingRegistrations: (p?: string) =>
       request<Record<string, unknown>[]>(`/students/pending-registrations${q(p)}`),
   },
@@ -278,7 +291,15 @@ export const api = {
           ),
       },
     },
+    plans: {
+      list: (query = "") =>
+        request<FeePlan[]>(`/fees/plans${query ? `?${query}` : ""}`),
+    },
     reports: {
+      get: (query = "") =>
+        request<FeeReportsSummary>(
+          `/payments/reports${query ? `?${query}` : ""}`,
+        ),
       reconciliation: (query = "") =>
         request<FeeReconciliation>(
           `/payments/reconciliation${query ? `?${query}` : ""}`,
@@ -336,6 +357,10 @@ export const api = {
   },
   attendance: {
     list: (p?: string) => request<AttendanceRecord[]>(`/attendance${q(p)}`),
+    report: (query = "") =>
+      request<AttendanceSummaryReport>(
+        `/attendance/report${query ? `?${query}` : ""}`,
+      ),
   },
   timetable: {
     list: (query = "") =>
@@ -543,6 +568,23 @@ export const api = {
       uploadForm<{ url: string }>("/events/upload-image", form),
   },
   schools: { list: () => request<School[]>("/auth/schools") },
+  branches: {
+    list: (query = "") =>
+      request<Branch[]>(`/branches${query ? `?${query}` : ""}`),
+    quota: () => request<BranchQuota>("/branches/quota"),
+    create: (payload: Partial<Branch>) =>
+      send<Branch>("/branches", "POST", payload),
+    update: (id: string, payload: Partial<Branch>) =>
+      send<Branch>(`/branches/${encodeURIComponent(id)}`, "PATCH", payload),
+    setHeadOffice: (id: string) =>
+      send<Branch>(
+        `/branches/${encodeURIComponent(id)}/head-office`,
+        "POST",
+        {},
+      ),
+    remove: (id: string) =>
+      send<unknown>(`/branches/${encodeURIComponent(id)}`, "DELETE"),
+  },
   plans: {
     list: (query = "") =>
       request<PlatformPlan[]>(`/platform/plans${query ? `?${query}` : ""}`),
@@ -650,6 +692,16 @@ export const api = {
         "POST",
         payload,
       ),
+    createSubjectsForSections: (payload: {
+      name: string;
+      description?: string;
+      sectionIds: string[];
+    }) =>
+      send<{
+        created: Record<string, unknown>[];
+        existing: Record<string, unknown>[];
+        className: string;
+      }>("/exam-masters/subjects/bulk", "POST", payload),
     update: (kind: string, id: string, payload: Record<string, unknown>) =>
       send<Record<string, unknown>>(
         `/exam-masters/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,

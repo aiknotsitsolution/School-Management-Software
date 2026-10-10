@@ -61,6 +61,9 @@ export interface School {
   state?: string;
   pincode?: string;
   board?: string;
+  examFormat?: string;
+  examFormatType?: string;
+  examFormats?: { name: string; types: string[] }[];
   recognitionNumber?: string;
   recognitionAuthority?: string;
   recognitionVerified?: boolean;
@@ -80,6 +83,29 @@ export interface School {
   };
   session?: string;
   currentSession?: { name: string; startDate?: string; endDate?: string };
+}
+export interface Branch {
+  _id: string;
+  schoolId?: string;
+  name: string;
+  code?: string;
+  shortName?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  isHeadOffice?: boolean;
+  isActive?: boolean;
+  isDeleted?: boolean;
+}
+export interface BranchQuota {
+  used: number;
+  limit: number | null;
+  remaining: number | null;
 }
 export interface PlatformPlan {
   _id: string;
@@ -267,6 +293,15 @@ export interface AttendanceRecord {
   date?: string;
   status: string;
 }
+export interface AttendanceClassSummary {
+  class?: string;
+  total?: number;
+  present?: number;
+  percentage?: number;
+}
+export interface AttendanceSummaryReport {
+  classWise?: AttendanceClassSummary[];
+}
 export interface FeeInvoice {
   _id: string;
   studentId?: string;
@@ -333,9 +368,28 @@ export interface FeeStructure {
   dueDate?: string;
   active?: boolean;
 }
+export interface FeePlan {
+  _id: string;
+  studentId?: string;
+  class?: string;
+  session?: string;
+  totalAnnual?: number;
+}
+export interface FeeReportsSummary {
+  collectionByDate?: { _id?: string; total?: number }[];
+  outstanding?: {
+    _id?: { class?: string; feeType?: string };
+    outstanding?: number;
+    count?: number;
+  }[];
+  classWiseCollection?: { _id?: string; total?: number; count?: number }[];
+  feeTypeWiseCollection?: { _id?: string; total?: number; count?: number }[];
+}
 export interface FeePayment {
   _id?: string;
   receiptNo?: string;
+  receiptMode?: string;
+  source?: string;
   studentId?: string;
   invoiceId?: string;
   amount?: number;
@@ -447,6 +501,7 @@ export interface StaffRecord {
   photoUrl?: string;
   idCardNumber?: string | null;
   idCardIssuedAt?: string | null;
+  classesAssigned?: { class?: string; section?: string }[];
   status?: "Active" | "Inactive" | "Resigned";
   profileStatus?: "complete" | "incomplete";
   branchId?: string | null;

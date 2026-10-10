@@ -44,6 +44,12 @@ function schoolSummary(value: School | null | undefined): School | null {
     state: value.state,
     pincode: value.pincode,
     board: value.board,
+    examFormat: value.examFormat,
+    examFormatType: value.examFormatType,
+    examFormats: value.examFormats?.map((format) => ({
+      name: format.name,
+      types: Array.isArray(format.types) ? [...format.types] : [],
+    })),
     recognitionNumber: value.recognitionNumber,
     recognitionAuthority: value.recognitionAuthority,
     recognitionVerified: value.recognitionVerified,

@@ -12,12 +12,15 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
 import { Button, Card, Empty, Input } from "../components/UI";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
 import { colors } from "../theme";
 import type { School } from "../types";
+import type { RootStackParams } from "../../App";
 
 type MasterKind =
   | "classes"
@@ -38,7 +41,8 @@ type MasterItem = Record<string, unknown> & {
   active?: boolean;
   status?: string;
 };
-type Tab = { key: "school-profile" | MasterKind; title: string; singular: string };
+type TabKey = "school-profile" | "school-board" | "syllabus" | MasterKind;
+type Tab = { key: TabKey; title: string; singular: string };
 type ProfileForm = {
   name: string;
   shortName: string;
@@ -49,17 +53,24 @@ type ProfileForm = {
   city: string;
   state: string;
   pincode: string;
-  board: string;
   recognitionNumber: string;
   recognitionAuthority: string;
 };
-type MasterForm = { name: string; description: string };
+type ExamFormat = { name: string; types: string[] };
+type MasterForm = {
+  name: string;
+  description: string;
+  classId: string;
+  sectionId: string;
+};
 
 const TABS: Tab[] = [
   { key: "school-profile", title: "School Profile", singular: "School Profile" },
+  { key: "school-board", title: "School Board", singular: "School Board" },
   { key: "classes", title: "Classes", singular: "Class" },
   { key: "sections", title: "Sections", singular: "Section" },
   { key: "subjects", title: "Subjects", singular: "Subject" },
+  { key: "syllabus", title: "Syllabus", singular: "Syllabus" },
   { key: "fee-types", title: "Fee Types", singular: "Fee Type" },
   { key: "attendance-statuses", title: "Attendance Statuses", singular: "Attendance Status" },
   { key: "leave-types", title: "Leave Types", singular: "Leave Type" },
@@ -96,7 +107,6 @@ const emptyProfile = (school?: School | null): ProfileForm => ({
   city: school?.city || "",
   state: school?.state || "",
   pincode: school?.pincode || "",
-  board: school?.board || "",
   recognitionNumber: school?.recognitionNumber || "",
   recognitionAuthority: school?.recognitionAuthority || "",
 });
@@ -216,8 +226,10 @@ function SelectField({
 }
 
 export default function ManageSchoolScreen() {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const { user, school, selectSchool, can } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab["key"]>("school-profile");
+  const [activeTab, setActiveTab] = useState<TabKey>("school-profile");
   const [items, setItems] = useState<Partial<Record<MasterKind, MasterItem[]>>>({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -236,9 +248,25 @@ export default function ManageSchoolScreen() {
     kind: MasterKind;
     item?: MasterItem;
   } | null>(null);
-  const [masterForm, setMasterForm] = useState<MasterForm>({ name: "", description: "" });
+  const [bulkSubjectsVisible, setBulkSubjectsVisible] = useState(false);
+  const [bulkClassId, setBulkClassId] = useState("");
+  const [bulkSectionIds, setBulkSectionIds] = useState<string[]>([]);
+  const [bulkSubjectName, setBulkSubjectName] = useState("");
+  const [bulkSubjectDescription, setBulkSubjectDescription] = useState("");
+  const [savingBulkSubjects, setSavingBulkSubjects] = useState(false);
+  const [masterForm, setMasterForm] = useState<MasterForm>({
+    name: "",
+    description: "",
+    classId: "",
+    sectionId: "",
+  });
   const [savingMaster, setSavingMaster] = useState(false);
   const [busyItem, setBusyItem] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
+  const [board, setBoard] = useState(school?.board || "");
+  const [examFormats, setExamFormats] = useState<ExamFormat[]>([]);
+  const [savingBoard, setSavingBoard] = useState(false);
 
   useEffect(() => {
     setForm(emptyProfile(school));
@@ -252,9 +280,32 @@ export default function ManageSchoolScreen() {
     school?.city,
     school?.state,
     school?.pincode,
-    school?.board,
     school?.recognitionNumber,
     school?.recognitionAuthority,
+  ]);
+
+  useEffect(() => {
+    setBoard(school?.board || "");
+    setExamFormats(
+      school?.examFormats?.length
+        ? school.examFormats.map((format) => ({
+            name: format.name || "",
+            types: format.types?.length ? [...format.types] : [""],
+          }))
+        : school?.examFormat
+          ? [
+              {
+                name: school.examFormat,
+                types: school.examFormatType ? [school.examFormatType] : [""],
+              },
+            ]
+          : [{ name: "", types: [""] }],
+    );
+  }, [
+    school?.board,
+    school?.examFormat,
+    school?.examFormatType,
+    school?.examFormats,
   ]);
 
   const loadMasters = useCallback(
@@ -297,13 +348,55 @@ export default function ManageSchoolScreen() {
   );
 
   useEffect(() => {
-    if (activeTab !== "school-profile") void loadMasters();
+    if (activeTab !== "school-profile" && activeTab !== "school-board" && activeTab !== "syllabus") {
+      void loadMasters();
+    }
   }, [activeTab, loadMasters]);
 
   const activeKind =
-    activeTab === "school-profile" ? null : (activeTab as MasterKind);
+    MASTER_KINDS.includes(activeTab as MasterKind)
+      ? (activeTab as MasterKind)
+      : null;
   const activeTabInfo = TABS.find((tab) => tab.key === activeTab);
-  const activeItems = activeKind ? items[activeKind] || [] : [];
+  const activeClasses = (items.classes || []).filter(isActive);
+  const sectionsForClass = (classId: string) => {
+    const selectedClass = activeClasses.find((item) => itemId(item) === classId);
+    if (!selectedClass) return [];
+    return (items.sections || []).filter(
+      (section) =>
+        isActive(section) &&
+        (String(section.classId || "") === classId ||
+          (!section.classId && section.className === selectedClass.name)),
+    );
+  };
+  const activeSections = classFilter ? sectionsForClass(classFilter) : [];
+  const activeItems = activeKind
+    ? (items[activeKind] || []).filter((item) => {
+        if (activeKind === "sections" && classFilter) {
+          const schoolClass = activeClasses.find(
+            (candidate) => itemId(candidate) === classFilter,
+          );
+          return (
+            String(item.classId || "") === classFilter ||
+            (!item.classId && item.className === schoolClass?.name)
+          );
+        }
+        if (activeKind === "subjects") {
+          if (!classFilter && !sectionFilter) return true;
+          return (items.sections || []).some(
+            (section) =>
+              itemId(section) === String(item.sectionId || "") &&
+              (!classFilter ||
+                String(section.classId || "") === classFilter ||
+                (!section.classId &&
+                  activeClasses.find((candidate) => itemId(candidate) === classFilter)?.name ===
+                    section.className)) &&
+              (!sectionFilter || itemId(section) === sectionFilter),
+          );
+        }
+        return true;
+      })
+    : [];
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return normalized
@@ -322,11 +415,115 @@ export default function ManageSchoolScreen() {
     safePage * pageSize,
   );
 
-  const changeTab = (key: Tab["key"]) => {
+  const changeTab = (key: TabKey) => {
+    if (key === "syllabus") {
+      setTabPickerVisible(false);
+      navigation.navigate("Syllabus");
+      return;
+    }
     setActiveTab(key);
     setQuery("");
     setPage(1);
+    setClassFilter("");
+    setSectionFilter("");
     setTabPickerVisible(false);
+  };
+
+  const saveBoard = async () => {
+    const formats = examFormats
+      .map((format) => ({
+        name: format.name.trim(),
+        types: format.types.map((type) => type.trim()).filter(Boolean),
+      }))
+      .filter((format) => format.name);
+    if (!board && formats.length) {
+      Alert.alert("Board required", "Select a board before adding exam formats.");
+      return;
+    }
+    if (examFormats.some((format) => !format.name.trim() && format.types.some((type) => type.trim()))) {
+      Alert.alert("Exam format required", "Give each result type a format name.");
+      return;
+    }
+    setSavingBoard(true);
+    try {
+      const response = await api.school.update({
+        board,
+        examFormats: formats,
+        examFormat: formats[0]?.name || "",
+        examFormatType: formats[0]?.types[0] || "",
+      });
+      await selectSchool(response.data);
+      Alert.alert("Saved", "School board configuration updated.");
+    } catch (saveError) {
+      Alert.alert(
+        "Could not save school board configuration",
+        saveError instanceof Error ? saveError.message : "Please try again.",
+      );
+    } finally {
+      setSavingBoard(false);
+    }
+  };
+
+  const selectBulkClass = (className: string) => {
+    const selectedClass = activeClasses.find((item) => item.name === className);
+    const classId = selectedClass ? itemId(selectedClass) : "";
+    setBulkClassId(classId);
+    setBulkSectionIds(
+      classId ? sectionsForClass(classId).map(itemId) : [],
+    );
+  };
+
+  const saveBulkSubjects = async () => {
+    if (!bulkClassId) {
+      Alert.alert("Class required", "Select a class before adding a subject.");
+      return;
+    }
+    if (!bulkSectionIds.length) {
+      Alert.alert("Section required", "Select at least one section.");
+      return;
+    }
+    if (!bulkSubjectName.trim()) {
+      Alert.alert("Subject name required", "Enter a subject name.");
+      return;
+    }
+    setSavingBulkSubjects(true);
+    try {
+      const response = await api.examMasters.createSubjectsForSections({
+        name: bulkSubjectName.trim(),
+        description: bulkSubjectDescription.trim(),
+        sectionIds: bulkSectionIds,
+      });
+      const { created, existing } = response.data;
+      setItems((current) => {
+        const currentSubjects = current.subjects || [];
+        const merged = [...currentSubjects];
+        created.forEach((subject) => {
+          const id = itemId(subject);
+          if (!merged.some((item) => itemId(item) === id)) {
+            merged.push(subject);
+          }
+        });
+        return { ...current, subjects: merged };
+      });
+      setBulkSubjectsVisible(false);
+      setBulkSubjectName("");
+      setBulkSubjectDescription("");
+      Alert.alert(
+        "Subjects added",
+        `Added to ${created.length} section${created.length === 1 ? "" : "s"}${
+          existing.length
+            ? `; already present in ${existing.length} section${existing.length === 1 ? "" : "s"}`
+            : ""
+        }.`,
+      );
+    } catch (saveError) {
+      Alert.alert(
+        "Could not add subject",
+        saveError instanceof Error ? saveError.message : "Please try again.",
+      );
+    } finally {
+      setSavingBulkSubjects(false);
+    }
   };
 
   const saveProfile = async () => {
@@ -366,7 +563,6 @@ export default function ManageSchoolScreen() {
         city: form.city.trim(),
         state: form.state.trim(),
         pincode,
-        board: form.board.trim(),
         recognitionNumber: form.recognitionNumber.trim(),
         recognitionAuthority: form.recognitionAuthority.trim(),
       });
@@ -461,16 +657,37 @@ export default function ManageSchoolScreen() {
 
   const openMasterForm = (item?: MasterItem) => {
     if (!activeKind) return;
+    const section = (items.sections || []).find(
+      (record) => itemId(record) === String(item?.sectionId || ""),
+    );
+    const itemClass = activeClasses.find(
+      (record) =>
+        itemId(record) === String(item?.classId || "") ||
+        record.name === item?.className ||
+        record.name === section?.className ||
+        itemId(record) === String(section?.classId || ""),
+    );
     setMasterForm({
       name: item?.name || "",
       description: item?.description || "",
+      classId: itemClass ? itemId(itemClass) : classFilter,
+      sectionId: String(item?.sectionId || sectionFilter || ""),
     });
     setMasterModal({ kind: activeKind, item });
   };
 
   const saveMaster = async () => {
-    if (!masterModal || !masterForm.name.trim()) {
+    if (!masterModal) return;
+    if (!masterForm.name.trim()) {
       Alert.alert("Name required", "Enter a name for this master value.");
+      return;
+    }
+    if (masterModal.kind === "sections" && !masterForm.classId) {
+      Alert.alert("Class required", "Select the class this section belongs to.");
+      return;
+    }
+    if (masterModal.kind === "subjects" && !masterForm.sectionId) {
+      Alert.alert("Section required", "Select the section this subject belongs to.");
       return;
     }
     setSavingMaster(true);
@@ -478,6 +695,22 @@ export default function ManageSchoolScreen() {
       const payload: Record<string, unknown> = { name: masterForm.name.trim() };
       if (masterModal.kind === "subjects")
         payload.description = masterForm.description.trim();
+      if (masterModal.kind === "sections") {
+        const selectedClass = activeClasses.find(
+          (item) => itemId(item) === masterForm.classId,
+        );
+        payload.classId = masterForm.classId;
+        if (selectedClass?.name) payload.className = selectedClass.name;
+      }
+      if (masterModal.kind === "subjects") {
+        const selectedSection = (items.sections || []).find(
+          (item) => itemId(item) === masterForm.sectionId,
+        );
+        payload.sectionId = masterForm.sectionId;
+        if (selectedSection?.name) payload.sectionName = selectedSection.name;
+        if (selectedSection?.classId) payload.classId = selectedSection.classId;
+        if (selectedSection?.className) payload.className = selectedSection.className;
+      }
       const response = masterModal.item
         ? await api.examMasters.update(
             masterModal.kind,
@@ -502,7 +735,7 @@ export default function ManageSchoolScreen() {
         };
       });
       setMasterModal(null);
-      setMasterForm({ name: "", description: "" });
+      setMasterForm({ name: "", description: "", classId: "", sectionId: "" });
     } catch (saveError) {
       Alert.alert(
         "Could not save master value",
@@ -577,6 +810,10 @@ export default function ManageSchoolScreen() {
           <Text style={styles.categoryCount}>
             {activeItems.filter(isActive).length} active
           </Text>
+        ) : activeTab === "school-board" ? (
+          <Text style={styles.categoryCount}>
+            {school?.board ? "Configured" : "Set up"}
+          </Text>
         ) : null}
         <Ionicons name="chevron-down" size={18} color={colors.muted} />
       </Pressable>
@@ -604,8 +841,8 @@ export default function ManageSchoolScreen() {
             <ScrollView style={styles.categoryOptions}>
               {TABS.map((tab) => {
                 const count =
-                  tab.key !== "school-profile"
-                    ? (items[tab.key]?.filter(isActive).length ?? 0)
+                  MASTER_KINDS.includes(tab.key as MasterKind)
+                    ? (items[tab.key as MasterKind]?.filter(isActive).length ?? 0)
                     : undefined;
                 return (
                   <Pressable
@@ -626,7 +863,15 @@ export default function ManageSchoolScreen() {
                     </Text>
                     {count !== undefined ? (
                       <Text style={styles.categoryOptionCount}>{count} active</Text>
-                    ) : null}
+                      ) : tab.key === "school-board" ? (
+                        <Text style={styles.categoryOptionCount}>
+                          {school?.board ? "Configured" : "Set up"}
+                        </Text>
+                      ) : tab.key === "syllabus" ? (
+                        <Text style={styles.categoryOptionCount}>
+                          Open syllabus manager
+                        </Text>
+                      ) : null}
                     {activeTab === tab.key ? (
                       <Ionicons name="checkmark-circle" size={19} color={colors.ink} />
                     ) : null}
@@ -905,15 +1150,8 @@ export default function ManageSchoolScreen() {
             <View style={styles.sectionDivider}>
               <Text style={styles.sectionTitle}>Affiliation & recognition</Text>
               <Text style={styles.cardSubtitle}>
-                Board and recognition details are managed with your school profile.
+                Recognition details are managed with your school profile.
               </Text>
-              <SelectField
-                label="Board"
-                value={form.board}
-                options={BOARD_OPTIONS}
-                onChange={(board) => setForm((current) => ({ ...current, board }))}
-                editable={profileCanSave}
-              />
               <Field label="Recognition number">
                 <Input
                   value={form.recognitionNumber}
@@ -975,6 +1213,161 @@ export default function ManageSchoolScreen() {
             </View>
           </Card>
         </ScrollView>
+      ) : activeTab === "school-board" ? (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Card style={styles.profileCard}>
+            <Text style={styles.cardTitle}>School Board Configuration</Text>
+            <Text style={styles.cardSubtitle}>
+              Set the board and exam formats and result types used by your school.
+            </Text>
+            <SelectField
+              label="School board"
+              value={board}
+              options={BOARD_OPTIONS}
+              onChange={(nextBoard) => {
+                setBoard(nextBoard);
+                if (nextBoard !== board) setExamFormats([{ name: "", types: [""] }]);
+              }}
+              editable={profileCanSave}
+            />
+            {examFormats.map((format, formatIndex) => (
+              <View key={`format-${formatIndex}`} style={styles.formatCard}>
+                <View style={styles.formatHeading}>
+                  <Text style={styles.sectionTitle}>
+                    Exam format {formatIndex + 1}
+                  </Text>
+                  {examFormats.length > 1 && profileCanSave ? (
+                    <Pressable
+                      onPress={() =>
+                        setExamFormats((current) =>
+                          current.filter((_, index) => index !== formatIndex),
+                        )
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove exam format ${formatIndex + 1}`}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={colors.alert} />
+                    </Pressable>
+                  ) : null}
+                </View>
+                <Field label="Format name">
+                  <Input
+                    value={format.name}
+                    onChangeText={(name) =>
+                      setExamFormats((current) =>
+                        current.map((item, index) =>
+                          index === formatIndex ? { ...item, name } : item,
+                        ),
+                      )
+                    }
+                    placeholder="e.g. Annual, Semester or Term-based"
+                    editable={profileCanSave && Boolean(board)}
+                  />
+                </Field>
+                {format.types.map((type, typeIndex) => (
+                  <View
+                    key={`format-${formatIndex}-type-${typeIndex}`}
+                    style={styles.formatTypeRow}
+                  >
+                    <Field label={`Result type ${typeIndex + 1}`}>
+                      <Input
+                        value={type}
+                        onChangeText={(value) =>
+                          setExamFormats((current) =>
+                            current.map((item, index) =>
+                              index === formatIndex
+                                ? {
+                                    ...item,
+                                    types: item.types.map((entry, entryIndex) =>
+                                      entryIndex === typeIndex ? value : entry,
+                                    ),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                        placeholder="e.g. Marks, Grades or GPA"
+                        editable={profileCanSave && Boolean(board)}
+                      />
+                    </Field>
+                    {format.types.length > 1 && profileCanSave ? (
+                      <Pressable
+                        style={styles.removeType}
+                        onPress={() =>
+                          setExamFormats((current) =>
+                            current.map((item, index) =>
+                              index === formatIndex
+                                ? {
+                                    ...item,
+                                    types: item.types.filter(
+                                      (_, entryIndex) => entryIndex !== typeIndex,
+                                    ),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove result type ${typeIndex + 1}`}
+                      >
+                        <Ionicons
+                          name="remove-circle-outline"
+                          size={20}
+                          color={colors.alert}
+                        />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ))}
+                {profileCanSave ? (
+                  <Pressable
+                    style={styles.addInline}
+                    onPress={() =>
+                      setExamFormats((current) =>
+                        current.map((item, index) =>
+                          index === formatIndex
+                            ? { ...item, types: [...item.types, ""] }
+                            : item,
+                        ),
+                      )
+                    }
+                    disabled={!board}
+                  >
+                    <Ionicons name="add-circle-outline" size={17} color={colors.info} />
+                    <Text style={styles.addInlineText}>Add result type</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+            {profileCanSave ? (
+              <>
+                <Button
+                  title="Add exam format"
+                  variant="ghost"
+                  onPress={() =>
+                    setExamFormats((current) => [
+                      ...current,
+                      { name: "", types: [""] },
+                    ])
+                  }
+                  disabled={!board}
+                />
+                <Button
+                  title="Save board configuration"
+                  onPress={() => void saveBoard()}
+                  loading={savingBoard}
+                />
+              </>
+            ) : (
+              <Text style={styles.permissionHint}>
+                You have read-only access to school settings.
+              </Text>
+            )}
+          </Card>
+        </ScrollView>
       ) : (
         <>
           <View style={styles.masterHeader}>
@@ -984,6 +1377,24 @@ export default function ManageSchoolScreen() {
                 {activeItems.filter(isActive).length} active · {activeItems.length} total
               </Text>
             </View>
+            {activeKind === "subjects" && mastersCanWrite ? (
+              <Pressable
+                style={styles.bulkButton}
+                onPress={() => {
+                  setBulkClassId(classFilter);
+                  setBulkSectionIds(
+                    classFilter ? sectionsForClass(classFilter).map(itemId) : [],
+                  );
+                  setBulkSubjectName("");
+                  setBulkSubjectDescription("");
+                  setBulkSubjectsVisible(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Add a subject to multiple sections"
+              >
+                <Ionicons name="layers-outline" size={17} color={colors.ink} />
+              </Pressable>
+            ) : null}
             {mastersCanWrite ? (
               <Pressable
                 style={styles.addButton}
@@ -994,6 +1405,50 @@ export default function ManageSchoolScreen() {
               </Pressable>
             ) : null}
           </View>
+          {activeKind === "sections" || activeKind === "subjects" ? (
+            <View style={styles.filterFields}>
+              <SelectField
+                label="Filter by class"
+                value={
+                  activeClasses.find((item) => itemId(item) === classFilter)
+                    ?.name || ""
+                }
+                options={activeClasses
+                  .map((item) => item.name || "")
+                  .filter(Boolean)}
+                onChange={(className) => {
+                  const selectedClass = activeClasses.find(
+                    (item) => item.name === className,
+                  );
+                  setClassFilter(selectedClass ? itemId(selectedClass) : "");
+                  setSectionFilter("");
+                  setPage(1);
+                }}
+              />
+              {activeKind === "subjects" ? (
+                <SelectField
+                  label="Filter by section"
+                  value={
+                    activeSections.find((item) => itemId(item) === sectionFilter)
+                      ?.name || ""
+                  }
+                  options={activeSections
+                    .map((item) => item.name || "")
+                    .filter(Boolean)}
+                  onChange={(sectionName) => {
+                    const selectedSection = activeSections.find(
+                      (item) => item.name === sectionName,
+                    );
+                    setSectionFilter(
+                      selectedSection ? itemId(selectedSection) : "",
+                    );
+                    setPage(1);
+                  }}
+                  editable={Boolean(classFilter)}
+                />
+              ) : null}
+            </View>
+          ) : null}
           <Input
             value={query}
             onChangeText={(value) => {
@@ -1196,6 +1651,117 @@ export default function ManageSchoolScreen() {
       )}
 
       <Modal
+        visible={bulkSubjectsVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => !savingBulkSubjects && setBulkSubjectsVisible(false)}
+      >
+        <View style={styles.modal}>
+          <View style={styles.modalHeading}>
+            <View>
+              <Text style={styles.modalTitle}>Add Subject to Class</Text>
+              <Text style={styles.modalSubtitle}>
+                Add one subject to multiple sections at once.
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setBulkSubjectsVisible(false)}
+              disabled={savingBulkSubjects}
+              hitSlop={10}
+            >
+              <Ionicons name="close" size={23} color={colors.ink} />
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.modalContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <SelectField
+              label="Class"
+              value={
+                activeClasses.find((item) => itemId(item) === bulkClassId)
+                  ?.name || ""
+              }
+              options={activeClasses
+                .map((item) => item.name || "")
+                .filter(Boolean)}
+              onChange={selectBulkClass}
+              editable={!savingBulkSubjects}
+            />
+            {bulkClassId ? (
+              <View style={styles.bulkSectionBox}>
+                <Text style={styles.fieldLabel}>Sections</Text>
+                {sectionsForClass(bulkClassId).length ? (
+                  sectionsForClass(bulkClassId).map((section) => {
+                    const sectionId = itemId(section);
+                    const selected = bulkSectionIds.includes(sectionId);
+                    return (
+                      <Pressable
+                        key={sectionId}
+                        style={styles.bulkSectionOption}
+                        onPress={() =>
+                          setBulkSectionIds((current) =>
+                            selected
+                              ? current.filter((id) => id !== sectionId)
+                              : [...current, sectionId],
+                          )
+                        }
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: selected }}
+                      >
+                        <Ionicons
+                          name={selected ? "checkbox" : "square-outline"}
+                          size={20}
+                          color={selected ? colors.info : colors.muted}
+                        />
+                        <Text style={styles.selectText}>
+                          Section {section.name || "—"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <Text style={styles.imageHint}>
+                    No active sections found for this class.
+                  </Text>
+                )}
+              </View>
+            ) : null}
+            <Field label="Subject name">
+              <Input
+                value={bulkSubjectName}
+                onChangeText={setBulkSubjectName}
+                placeholder="e.g. Mathematics"
+                editable={!savingBulkSubjects}
+              />
+            </Field>
+            <Field label="Description (optional)">
+              <Input
+                value={bulkSubjectDescription}
+                onChangeText={setBulkSubjectDescription}
+                placeholder="Subject description"
+                multiline
+                numberOfLines={3}
+                style={styles.multilineInput}
+                editable={!savingBulkSubjects}
+              />
+            </Field>
+            <Button
+              title="Add subject to selected sections"
+              onPress={() => void saveBulkSubjects()}
+              loading={savingBulkSubjects}
+            />
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => setBulkSubjectsVisible(false)}
+              disabled={savingBulkSubjects}
+            />
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal
         visible={Boolean(masterModal)}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -1230,6 +1796,78 @@ export default function ManageSchoolScreen() {
                   autoFocus
                 />
               </Field>
+              {masterModal.kind === "sections" ? (
+                <SelectField
+                  label="Class"
+                  value={
+                    activeClasses.find(
+                      (item) => itemId(item) === masterForm.classId,
+                    )?.name || ""
+                  }
+                  options={activeClasses
+                    .map((item) => item.name || "")
+                    .filter(Boolean)}
+                  onChange={(className) => {
+                    const selectedClass = activeClasses.find(
+                      (item) => item.name === className,
+                    );
+                    setMasterForm((current) => ({
+                      ...current,
+                      classId: selectedClass ? itemId(selectedClass) : "",
+                    }));
+                  }}
+                  editable={mastersCanWrite}
+                />
+              ) : null}
+              {masterModal.kind === "subjects" ? (
+                <>
+                  <SelectField
+                    label="Class"
+                    value={
+                      activeClasses.find(
+                        (item) => itemId(item) === masterForm.classId,
+                      )?.name || ""
+                    }
+                    options={activeClasses
+                      .map((item) => item.name || "")
+                      .filter(Boolean)}
+                    onChange={(className) => {
+                      const selectedClass = activeClasses.find(
+                        (item) => item.name === className,
+                      );
+                      setMasterForm((current) => ({
+                        ...current,
+                        classId: selectedClass ? itemId(selectedClass) : "",
+                        sectionId: "",
+                      }));
+                    }}
+                    editable={mastersCanWrite}
+                  />
+                  <SelectField
+                    label="Section"
+                    value={
+                      sectionsForClass(masterForm.classId).find(
+                        (item) => itemId(item) === masterForm.sectionId,
+                      )?.name || ""
+                    }
+                    options={sectionsForClass(masterForm.classId)
+                      .map((item) => item.name || "")
+                      .filter(Boolean)}
+                    onChange={(sectionName) => {
+                      const selectedSection = sectionsForClass(
+                        masterForm.classId,
+                      ).find((item) => item.name === sectionName);
+                      setMasterForm((current) => ({
+                        ...current,
+                        sectionId: selectedSection
+                          ? itemId(selectedSection)
+                          : "",
+                      }));
+                    }}
+                    editable={mastersCanWrite && Boolean(masterForm.classId)}
+                  />
+                </>
+              ) : null}
               {masterModal.kind === "subjects" ? (
                 <Field label="Description (optional)">
                   <Input
@@ -1424,6 +2062,30 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   sectionTitle: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+  formatCard: {
+    gap: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: "#FAFBFD",
+  },
+  formatHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  formatTypeRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  removeType: { paddingBottom: 11 },
+  addInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingVertical: 4,
+  },
+  addInlineText: { color: colors.info, fontSize: 11, fontWeight: "700" },
+  filterFields: { paddingHorizontal: 14, gap: 10 },
   banner: {
     height: 108,
     borderRadius: 12,
@@ -1455,6 +2117,16 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 12,
     backgroundColor: colors.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bulkButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1599,6 +2271,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderBottomWidth: 1,
     borderBottomColor: "#EAE7DF",
+  },
+  bulkSectionBox: {
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: "#fff",
+  },
+  bulkSectionOption: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   unverifiedText: { color: colors.muted },
   masterDetails: {
