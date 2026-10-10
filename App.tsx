@@ -39,6 +39,7 @@ import SubscriptionScreen from "./src/screens/SubscriptionScreen";
 import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
 import TimetableScreen from "./src/screens/TimetableScreen";
 import ReportCardScreen from "./src/screens/ReportCardScreen";
+import GradingScalesScreen from "./src/screens/GradingScalesScreen";
 import {
   NotificationsProvider,
   useNotifications,
@@ -48,6 +49,7 @@ import IdCardScreen from "./src/screens/IdCardScreen";
 import UploadDocumentScreen from "./src/screens/UploadDocumentScreen";
 import StaffScreen from "./src/screens/StaffScreen";
 import FeesCollectionScreen from "./src/screens/FeesCollectionScreen";
+import HomeworkScreen from "./src/screens/HomeworkScreen";
 import { colors } from "./src/theme";
 
 export type RootStackParams = {
@@ -71,6 +73,7 @@ export type RootStackParams = {
   MarksEntry: undefined;
   Timetable: undefined;
   ReportCard: undefined;
+  GradingScales: undefined;
   BusTracking: undefined;
   IdCard: undefined;
   UploadDocument: undefined;
@@ -80,6 +83,7 @@ export type RootStackParams = {
   FeesCollection: undefined;
   ManageSchool: undefined;
   Subscription: undefined;
+  Homework: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -299,6 +303,11 @@ function Root() {
         options={{ title: "Report Card" }}
       />
       <Stack.Screen
+        name="GradingScales"
+        component={GradingScalesScreen}
+        options={{ title: "Grading Scales" }}
+      />
+      <Stack.Screen
         name="BusTracking"
         component={BusTrackingScreen}
         options={{ title: "Bus Tracking" }}
@@ -328,6 +337,11 @@ function Root() {
         name="Examination"
         component={ExaminationScreen}
         options={{ title: "Examination" }}
+      />
+      <Stack.Screen
+        name="Homework"
+        component={HomeworkScreen}
+        options={{ title: "Homework" }}
       />
     </Stack.Navigator>
   );

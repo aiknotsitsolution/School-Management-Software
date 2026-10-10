@@ -13,13 +13,15 @@ export default function MoreScreen() {
   const { user, can } = useAuth();
   const isSuper = user?.role === "super_admin";
   const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
+  const isStudent = user?.role === "student";
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.paper }}
       contentContainerStyle={{ padding: 16, gap: 18 }}
     >
       {!isSuper &&
-        (can("transport:read") ||
+        (isStudent ||
+          can("transport:read") ||
           can("students:read") ||
           can("timetable:read") ||
           can("exams:read") ||
@@ -115,7 +117,22 @@ export default function MoreScreen() {
                   <Text style={s.label}>Examination</Text>
                 </Pressable>
               )}
-              {can("marks:read") && (
+              {(can("exams:read") || can("exams:write")) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("GradingScales")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="stats-chart"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Grading Scales</Text>
+                </Pressable>
+              )}
+              {(can("marks:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("ReportCard")}
@@ -367,6 +384,8 @@ export default function MoreScreen() {
                       nav.navigate("MarkAttendance");
                     } else if (i.key === "exams" && isSchoolAdmin) {
                       nav.navigate("Examination");
+                    } else if (i.key === "homework") {
+                      nav.navigate("Homework");
                     } else if (i.key === "admissions") {
                       nav.navigate("AdmissionEnquiry");
                     } else if (i.key === "p-plans") {
