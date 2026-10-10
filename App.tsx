@@ -43,6 +43,11 @@ import GradingScalesScreen from "./src/screens/GradingScalesScreen";
 import SyllabusScreen from "./src/screens/SyllabusScreen";
 import LibraryScreen from "./src/screens/LibraryScreen";
 import PromotionsScreen from "./src/screens/PromotionsScreen";
+import TransfersScreen from "./src/screens/TransfersScreen";
+import AcademicSessionsScreen from "./src/screens/AcademicSessionsScreen";
+import RolloverScreen from "./src/screens/RolloverScreen";
+import InventoryScreen from "./src/screens/InventoryScreen";
+import HostelScreen from "./src/screens/HostelScreen";
 import {
   NotificationsProvider,
   useNotifications,
@@ -53,6 +58,9 @@ import UploadDocumentScreen from "./src/screens/UploadDocumentScreen";
 import StaffScreen from "./src/screens/StaffScreen";
 import FeesCollectionScreen from "./src/screens/FeesCollectionScreen";
 import HomeworkScreen from "./src/screens/HomeworkScreen";
+import LeaveScreen from "./src/screens/LeaveScreen";
+import PayrollScreen from "./src/screens/PayrollScreen";
+import OnlinePaymentScreen from "./src/screens/OnlinePaymentScreen";
 import { colors } from "./src/theme";
 
 export type RootStackParams = {
@@ -80,6 +88,11 @@ export type RootStackParams = {
   Syllabus: undefined;
   Library: undefined;
   Promotions: undefined;
+  Transfers: undefined;
+  AcademicSessions: undefined;
+  Rollover: undefined;
+  Inventory: undefined;
+  Hostel: undefined;
   BusTracking: undefined;
   IdCard: undefined;
   UploadDocument: undefined;
@@ -90,6 +103,9 @@ export type RootStackParams = {
   ManageSchool: undefined;
   Subscription: undefined;
   Homework: undefined;
+  Leave: undefined;
+  Payroll: undefined;
+  OnlinePayment: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -329,6 +345,31 @@ function Root() {
         options={{ title: "Promotions" }}
       />
       <Stack.Screen
+        name="Transfers"
+        component={TransfersScreen}
+        options={{ title: "Transfers" }}
+      />
+      <Stack.Screen
+        name="AcademicSessions"
+        component={AcademicSessionsScreen}
+        options={{ title: "Academic Sessions" }}
+      />
+      <Stack.Screen
+        name="Rollover"
+        component={RolloverScreen}
+        options={{ title: "Academic Rollover" }}
+      />
+      <Stack.Screen
+        name="Inventory"
+        component={InventoryScreen}
+        options={{ title: "Inventory" }}
+      />
+      <Stack.Screen
+        name="Hostel"
+        component={HostelScreen}
+        options={{ title: "Hostel Management" }}
+      />
+      <Stack.Screen
         name="BusTracking"
         component={BusTrackingScreen}
         options={{ title: "Bus Tracking" }}
@@ -363,6 +404,21 @@ function Root() {
         name="Homework"
         component={HomeworkScreen}
         options={{ title: "Homework" }}
+      />
+      <Stack.Screen
+        name="Leave"
+        component={LeaveScreen}
+        options={{ title: "Leave Management" }}
+      />
+      <Stack.Screen
+        name="Payroll"
+        component={PayrollScreen}
+        options={{ title: "Payroll Management" }}
+      />
+      <Stack.Screen
+        name="OnlinePayment"
+        component={OnlinePaymentScreen}
+        options={{ title: "Online Fees Payment" }}
       />
     </Stack.Navigator>
   );

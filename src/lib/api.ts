@@ -10,10 +10,15 @@ import type {
   Conversation,
   ConversationPerson,
   FeeInvoice,
+  FeeInvoiceRecord,
+  FeePaymentOrder,
   FeePayment,
   FeeReconciliation,
   FeeStructure,
+  LeaveBalance,
+  LeaveRequest,
   Notice,
+  PayrollRecord,
   PlatformAnalytics,
   PlatformPlan,
   PlatformReport,
@@ -182,6 +187,7 @@ export const api = {
     send<unknown>("/auth/change-password", "POST", payload),
   students: {
     list: (p?: string) => request<Student[]>(`/students${q(p)}`),
+    me: () => request<Student>("/students/me"),
     create: (payload: Partial<Student> & Record<string, unknown>) =>
       send<Student>("/students", "POST", payload),
     update: (id: string, payload: Partial<Student> & Record<string, unknown>) =>
@@ -226,7 +232,7 @@ export const api = {
     },
     invoices: {
       list: (query = "") =>
-        request<FeeInvoice[]>(`/fees${query ? `?${query}` : ""}`),
+        request<FeeInvoiceRecord[]>(`/fees${query ? `?${query}` : ""}`),
     },
     payments: {
       list: (query = "") =>
@@ -240,6 +246,37 @@ export const api = {
         chequeDate?: string;
         bankName?: string;
       }) => send<FeePayment>("/payments", "POST", payload),
+      orders: {
+        list: (query = "") =>
+          request<FeePaymentOrder[]>(
+            `/payments/orders${query ? `?${query}` : ""}`,
+          ),
+        create: (payload: {
+          invoiceId: string;
+          amount: number;
+          mode?: string;
+        }) => send<FeePaymentOrder>("/payments/orders", "POST", payload),
+        initiate: (id: string) =>
+          send<FeePaymentOrder>(
+            `/payments/orders/${encodeURIComponent(id)}/initiate`,
+            "POST",
+          ),
+        confirm: (id: string, payload: Record<string, string>) =>
+          send<{
+            order: FeePaymentOrder;
+            payment?: FeePayment;
+            note?: string;
+          }>(
+            `/payments/orders/${encodeURIComponent(id)}/confirm`,
+            "POST",
+            payload,
+          ),
+        cancel: (id: string) =>
+          send<FeePaymentOrder>(
+            `/payments/orders/${encodeURIComponent(id)}/cancel`,
+            "PATCH",
+          ),
+      },
     },
     reports: {
       reconciliation: (query = "") =>
@@ -345,6 +382,25 @@ export const api = {
   staff: {
     list: (query = "") =>
       request<StaffRecord[]>(`/staff${query ? `?${query}` : ""}`),
+    update: (id: string, payload: Partial<StaffRecord>) =>
+      send<StaffRecord>(`/staff/${encodeURIComponent(id)}`, "PUT", payload),
+    completeProfile: (
+      id: string,
+      payload: Pick<StaffRecord, "dob" | "gender" | "contact" | "address">,
+    ) =>
+      send<StaffRecord>(
+        `/staff/${encodeURIComponent(id)}/complete-profile`,
+        "PUT",
+        payload,
+      ),
+    issueIdCard: (id: string) =>
+      send<StaffRecord>(
+        `/staff/${encodeURIComponent(id)}/issue-id-card`,
+        "POST",
+        {},
+      ),
+    remove: (id: string) =>
+      send<StaffRecord>(`/staff/${encodeURIComponent(id)}`, "DELETE"),
     pendingRegistrations: (query = "") =>
       request<Record<string, unknown>[]>(
         `/staff/pending-registrations${query ? `?${query}` : ""}`,
@@ -358,9 +414,81 @@ export const api = {
         ),
     },
   },
+  payroll: {
+    list: (query = "") =>
+      request<PayrollRecord[]>(`/payroll${query ? `?${query}` : ""}`),
+    create: (payload: {
+      staffId: string;
+      month: string;
+      year: number;
+      basic: number;
+      allowances: number;
+      deductions: number;
+      deductionReason: string;
+      adjustForAttendance: boolean;
+    }) => send<PayrollRecord>("/payroll", "POST", payload),
+    update: (
+      id: string,
+      payload: {
+        basic: number;
+        allowances: number;
+        deductions: number;
+        deductionReason: string;
+      },
+    ) =>
+      send<PayrollRecord>(
+        `/payroll/${encodeURIComponent(id)}`,
+        "PATCH",
+        payload,
+      ),
+    markPaid: (id: string) =>
+      send<PayrollRecord>(
+        `/payroll/${encodeURIComponent(id)}/pay`,
+        "PATCH",
+        {},
+      ),
+    generateAll: (
+      month: string,
+      year: number,
+      options: { adjustForAttendance: boolean },
+    ) =>
+      send<{ created: number; skipped: number; total: number }>(
+        "/payroll/generate-all",
+        "POST",
+        { month, year, ...options },
+      ),
+  },
+  leaves: {
+    list: (query = "") =>
+      request<LeaveRequest[]>(`/leaves${query ? `?${query}` : ""}`),
+    create: (payload: {
+      leaveType: string;
+      fromDate: string;
+      toDate: string;
+      reason: string;
+    }) => send<LeaveRequest>("/leaves", "POST", payload),
+    balance: () => request<Record<string, LeaveBalance>>("/leaves/balance"),
+    updateStatus: (
+      id: string,
+      status: "Approved" | "Rejected",
+    ) =>
+      send<LeaveRequest>(
+        `/leaves/${encodeURIComponent(id)}/status`,
+        "PATCH",
+        { status },
+      ),
+  },
   assignments: {
     list: (query = "") =>
       request<TeacherAssignment[]>(`/assignments${query ? `?${query}` : ""}`),
+    create: (payload: Record<string, unknown>) =>
+      send<TeacherAssignment>("/assignments", "POST", payload),
+    end: (id: string) =>
+      send<TeacherAssignment>(
+        `/assignments/${encodeURIComponent(id)}/end`,
+        "POST",
+        {},
+      ),
     me: () =>
       request<{
         classTeacher?: Record<string, unknown>[];
@@ -369,9 +497,39 @@ export const api = {
         primaryScope?: { class?: string; section?: string | null } | null;
       }>("/assignments/me"),
   },
+  homework: {
+    list: (query = "") =>
+      request<Record<string, unknown>[]>(
+        `/homework${query ? `?${query}` : ""}`,
+      ),
+    create: (payload: Record<string, unknown>) =>
+      send<Record<string, unknown>>("/homework", "POST", payload),
+    update: (id: string, payload: Record<string, unknown>) =>
+      send<Record<string, unknown>>(
+        `/homework/${encodeURIComponent(id)}`,
+        "PUT",
+        payload,
+      ),
+    updateMyStatus: (id: string, status: string) =>
+      send<Record<string, unknown>>(
+        `/homework/${encodeURIComponent(id)}/status`,
+        "PATCH",
+        { status },
+      ),
+    remove: (id: string) =>
+      send(`/homework/${encodeURIComponent(id)}`, "DELETE"),
+  },
   transport: {
     list: (query = "") =>
       request<TransportRoute[]>(`/transport${query ? `?${query}` : ""}`),
+    trackingStatus: () =>
+      request<{
+        providers?: {
+          traccar?: { enabled?: boolean; configured?: boolean };
+        };
+      }>("/transport/tracking/status"),
+    sync: (id: string) =>
+      send<TransportRoute>(`/transport/${encodeURIComponent(id)}/sync`, "POST", {}),
   },
   events: {
     list: () => request<SchoolEvent[]>("/events"),

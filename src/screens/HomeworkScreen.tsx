@@ -17,6 +17,7 @@ import { extractList, Row } from "../lib/format";
 import { get, send, uploadForm } from "../lib/api";
 import { pickDocument, toFormData, type Picked } from "../lib/upload";
 import { colors, radius } from "../theme";
+import StaffWorkPanel from "./StaffWorkPanel";
 
 type Homework = Row & {
   _id?: string;
@@ -82,6 +83,9 @@ export default function HomeworkScreen() {
   const isStudent = role === "student";
   const canWrite = can("homework:write") && !isStudent;
   const canReview = canWrite;
+  const canManageStaffWork =
+    canWrite && ["school_admin", "admin", "super_admin"].includes(role);
+  const [staffWorkMode, setStaffWorkMode] = useState(false);
   const [homework, setHomework] = useState<Homework[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [scopes, setScopes] = useState<Scope[]>([]);
@@ -338,6 +342,10 @@ export default function HomeworkScreen() {
     </Card>
   ) : null;
 
+  if (staffWorkMode && canManageStaffWork) {
+    return <StaffWorkPanel />;
+  }
+
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -355,6 +363,27 @@ export default function HomeworkScreen() {
             </Pressable>
           ) : null}
         </View>
+
+        {canManageStaffWork && (
+          <View style={styles.modeTabs}>
+            <Pressable
+              style={[styles.modeTab, !staffWorkMode && styles.modeTabActive]}
+              onPress={() => setStaffWorkMode(false)}
+            >
+              <Text style={[styles.modeTabText, !staffWorkMode && styles.modeTabTextActive]}>
+                Class Homework
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modeTab, staffWorkMode && styles.modeTabActive]}
+              onPress={() => setStaffWorkMode(true)}
+            >
+              <Text style={[styles.modeTabText, staffWorkMode && styles.modeTabTextActive]}>
+                Staff Work
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {!isStudent && scopes.length > 1 ? (
           <Card style={styles.scopeCard}>
@@ -623,6 +652,11 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 36, gap: 12 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 2 },
   headingCopy: { flex: 1 },
+  modeTabs: { flexDirection: "row", gap: 8, marginBottom: 2 },
+  modeTab: { flex: 1, alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: "#fff", paddingVertical: 9 },
+  modeTabActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  modeTabText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  modeTabTextActive: { color: "#fff" },
   title: { color: colors.ink, fontSize: 24, fontWeight: "800" },
   subtitle: { color: colors.muted, fontSize: 13, marginTop: 4 },
   addButton: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.info, borderRadius: radius.md, paddingHorizontal: 13, paddingVertical: 10 },

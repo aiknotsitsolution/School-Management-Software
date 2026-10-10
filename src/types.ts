@@ -278,6 +278,50 @@ export interface FeeInvoice {
   dueDate?: string;
   status?: string;
   session?: string;
+  receiptNo?: string;
+  currency?: string;
+  createdAt?: string;
+}
+export interface FeeInvoiceRecord extends FeeInvoice {
+  feeType: string;
+  amount: number;
+  paidAmount?: number;
+  dueDate?: string;
+  currency?: string;
+  receiptNo?: string;
+  class?: string;
+  section?: string;
+  session?: string;
+}
+export interface PaymentOrderCheckout {
+  mode?: string;
+  provider?: string;
+  amount?: number;
+  currency?: string;
+  providerOrderId?: string | null;
+  checkoutUrl?: string | null;
+  keyId?: string | null;
+  publishableKey?: string | null;
+  merchantId?: string | null;
+  baseUrl?: string | null;
+  enabled?: boolean;
+  display?: Record<string, unknown> | null;
+  upiId?: string | null;
+  upiIntent?: string | null;
+}
+export interface FeePaymentOrder {
+  _id: string;
+  invoiceId: string;
+  studentId?: string;
+  amount: number;
+  currency?: string;
+  externalRef?: string;
+  gatewayMode?: string;
+  status: string;
+  providerOrderId?: string | null;
+  purpose?: string;
+  checkout?: PaymentOrderCheckout;
+  createdAt?: string;
 }
 export interface FeeStructure {
   _id: string;
@@ -325,6 +369,10 @@ export interface AdmissionEnquiry {
 }
 export interface TransportStop {
   name?: string;
+  time?: string;
+  lat?: number | string;
+  lng?: number | string;
+  sequence?: number;
 }
 export interface TransportRoute {
   _id: string;
@@ -338,7 +386,34 @@ export interface TransportRoute {
     lat?: number | string;
     lng?: number | string;
     updatedAt?: string;
+    source?: string;
+    speedKmh?: number;
+    headingDeg?: number;
   } | null;
+  tracking?: {
+    provider?: string;
+    deviceId?: string | null;
+    deviceName?: string | null;
+    enabled?: boolean;
+  };
+  live?: {
+    nextStop?: string | null;
+    nextStopIndex?: number | null;
+    stopsRemaining?: number | null;
+    distanceKm?: number | null;
+    etaMinutes?: number | null;
+    routingSource?: string;
+    source?: string | null;
+    speedKmh?: number | null;
+    headingDeg?: number | null;
+    stale?: boolean;
+    ageMinutes?: number | null;
+  };
+  routePlan?: {
+    totalKm?: number | null;
+    totalMinutes?: number | null;
+    source?: string;
+  };
 }
 export interface SchoolEvent {
   _id: string;
@@ -374,12 +449,50 @@ export interface StaffRecord {
   idCardIssuedAt?: string | null;
   status?: "Active" | "Inactive" | "Resigned";
   profileStatus?: "complete" | "incomplete";
+  branchId?: string | null;
+}
+export interface PayrollRecord {
+  _id: string;
+  staffId: string;
+  month: string;
+  year: number;
+  basic: number;
+  allowances?: number;
+  deductions?: number;
+  deductionReason?: string;
+  attendanceDeduction?: number;
+  attendancePct?: number | null;
+  netPay?: number;
+  status: "Pending" | "Paid" | string;
+  paidOn?: string;
+  createdAt?: string;
+}
+export interface LeaveRequest {
+  _id: string;
+  staffId?: string;
+  studentId?: string;
+  leaveType: string;
+  fromDate: string;
+  toDate: string;
+  reason?: string;
+  status: "Pending" | "Approved" | "Rejected" | string;
+  remarks?: string;
+  createdAt?: string;
+}
+export interface LeaveBalance {
+  entitlement: number;
+  used: number;
+  remaining: number;
 }
 export interface TeacherAssignment {
   _id: string;
   staffId: string;
   type: "teaching" | "class_teacher";
   status: "active" | "ended";
+  class?: string;
+  section?: string;
+  subject?: string;
+  session?: string;
 }
 export interface Notice {
   _id: string;

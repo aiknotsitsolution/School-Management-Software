@@ -30,18 +30,29 @@ export default function MoreScreen() {
           can("attendance:mark") ||
           can("students:write") ||
           can("marks:write") ||
+          can("homework:read") ||
           can("library:read") ||
           can("promotion:read") ||
           can("promotion:write") ||
+          can("transfer:read") ||
+          can("transfer:write") ||
+          can("sessions:read") ||
+          can("sessions:write") ||
+          can("rollover:read") ||
+          can("inventory:read") ||
+          can("inventory:write") ||
+          can("hostel:read") ||
+          can("hostel:manage") ||
           can("notices:read") ||
           can("notices:publish") ||
-          (isSchoolAdmin && can("staff:read")) ||
+          can("leaves:apply") ||
+          can("staff:read") ||
           (isSchoolAdmin && can("fees:read")) ||
           can("enquiries:write")) && (
           <View>
             <Text style={s.group}>Quick actions</Text>
             <View style={s.grid}>
-              {isSchoolAdmin && can("staff:read") && (
+              {can("staff:read") && (
                 <Pressable style={s.tile} onPress={() => nav.navigate("Staff")}>
                   <View style={s.icon}>
                     <Ionicons
@@ -150,6 +161,81 @@ export default function MoreScreen() {
                   <Text style={s.label}>Promotions</Text>
                 </Pressable>
               )}
+              {(can("transfer:read") || can("transfer:write")) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Transfers")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="git-compare"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Transfers</Text>
+                </Pressable>
+              )}
+              {(can("sessions:read") || can("sessions:write")) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("AcademicSessions")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="calendar"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Academic Sessions</Text>
+                </Pressable>
+              )}
+              {can("rollover:read") && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Rollover")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="sync"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Academic Rollover</Text>
+                </Pressable>
+              )}
+              {can("inventory:read") && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Inventory")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="cube"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Inventory</Text>
+                </Pressable>
+              )}
+              {(can("hostel:read") || can("hostel:manage")) && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Hostel")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="bed"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Hostel</Text>
+                </Pressable>
+              )}
               {(can("marks:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
@@ -168,6 +254,21 @@ export default function MoreScreen() {
               {(can("homework:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
+                  onPress={() => nav.navigate("Homework")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="document-text"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Homework</Text>
+                </Pressable>
+              )}
+              {can("homework:read") && (
+                <Pressable
+                  style={s.tile}
                   onPress={() => nav.navigate("Syllabus")}
                 >
                   <View style={s.icon}>
@@ -180,7 +281,7 @@ export default function MoreScreen() {
                   <Text style={s.label}>Syllabus</Text>
                 </Pressable>
               )}
-              {isStudent && can("library:read") && (
+              {can("library:read") && (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("Library")}
@@ -288,7 +389,7 @@ export default function MoreScreen() {
               {can("leaves:apply") && (
                 <Pressable
                   style={s.tile}
-                  onPress={() => nav.navigate("Form", { form: "leave" })}
+                  onPress={() => nav.navigate("Leave")}
                 >
                   <View style={s.icon}>
                     <Ionicons
@@ -297,7 +398,7 @@ export default function MoreScreen() {
                       color={colors.amberDark}
                     />
                   </View>
-                  <Text style={s.label}>Apply Leave</Text>
+                  <Text style={s.label}>Leave Management</Text>
                 </Pressable>
               )}
               {can("notices:publish") && (
@@ -416,6 +517,8 @@ export default function MoreScreen() {
             ? i.platform && i.key !== "p-schools"
             : !i.platform &&
               i.key !== "exams" &&
+              i.key !== "inventory" &&
+              i.key !== "hostel" &&
               (!i.perm || can(i.perm)),
         );
         if (!items.length) return null;
@@ -434,6 +537,12 @@ export default function MoreScreen() {
                       nav.navigate("Examination");
                     } else if (i.key === "homework") {
                       nav.navigate("Homework");
+                    } else if (i.key === "leaves") {
+                      nav.navigate("Leave");
+                    } else if (i.key === "payroll") {
+                      nav.navigate("Payroll");
+                    } else if (i.key === "orders") {
+                      nav.navigate("OnlinePayment");
                     } else if (i.key === "admissions") {
                       nav.navigate("AdmissionEnquiry");
                     } else if (i.key === "p-plans") {

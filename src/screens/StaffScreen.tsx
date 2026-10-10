@@ -23,15 +23,13 @@ import type { StaffRecord, TeacherAssignment } from "../types";
 const ROLE_FILTERS = [
   { value: "all", label: "All staff" },
   { value: "teacher", label: "Teachers" },
-  { value: "admin-staff", label: "Admin staff" },
-  { value: "support", label: "Support" },
+  { value: "staff", label: "Non-teaching staff" },
 ] as const;
-const STAFF_ROLES = ["teacher", "admin-staff", "support"] as const;
+const STAFF_ROLES = ["teacher", "staff"] as const;
 const STATUS_FILTERS = ["All", "Active", "Inactive", "Resigned"] as const;
 const roleLabels: Record<string, string> = {
   teacher: "Teacher",
-  "admin-staff": "Admin staff",
-  support: "Support staff",
+  staff: "Non-teaching staff",
 };
 type StaffForm = {
   employeeId: string;
@@ -47,6 +45,12 @@ type StaffForm = {
   salary: string;
   subjects: string;
   status: "Active" | "Inactive" | "Resigned";
+};
+type CompleteProfileForm = {
+  dob: string;
+  gender: "" | "Male" | "Female" | "Other";
+  contact: string;
+  address: string;
 };
 const emptyStaffForm = (): StaffForm => ({
   employeeId: "",
@@ -118,8 +122,7 @@ const initials = (name: string) =>
     .toUpperCase();
 
 export default function StaffScreen() {
-  const { user, can } = useAuth();
-  const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
+  const { can } = useAuth();
   const [items, setItems] = useState<StaffRecord[]>([]);
   const [assignments, setAssignments] = useState<TeacherAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,9 +135,15 @@ export default function StaffScreen() {
     useState<(typeof STATUS_FILTERS)[number]>("All");
   const [formVisible, setFormVisible] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffRecord | null>(null);
+  const [editingStaff, setEditingStaff] = useState<StaffRecord | null>(null);
+  const [completeProfileVisible, setCompleteProfileVisible] = useState(false);
+  const [completeProfileForm, setCompleteProfileForm] =
+    useState<CompleteProfileForm>({ dob: "", gender: "", contact: "", address: "" });
+  const [profileActionBusy, setProfileActionBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<StaffForm>(emptyStaffForm);
-  const canAddStaff = isSchoolAdmin && can("staff:write");
+  const canWriteStaff = can("staff:write");
+  const canAddStaff = canWriteStaff;
 
   const loadStaff = async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -142,7 +151,7 @@ export default function StaffScreen() {
     try {
       const [staffResult, assignmentResult] = await Promise.allSettled([
         api.staff.list("limit=500"),
-        api.assignments.list("type=class_teacher&status=active&limit=500"),
+        api.assignments.list("limit=500"),
       ]);
       if (staffResult.status === "rejected") throw staffResult.reason;
       setItems(staffResult.value.data || []);
@@ -204,7 +213,7 @@ export default function StaffScreen() {
     }
     setSaving(true);
     try {
-      const response = await api.staff.create({
+      const payload = {
         employeeId: form.employeeId.trim(),
         name: form.name.trim(),
         designation: form.designation.trim(),
@@ -224,18 +233,129 @@ export default function StaffScreen() {
                 .filter(Boolean)
             : [],
         status: form.status,
-      });
-      setItems((current) => [response.data, ...current]);
+      };
+      const response = editingStaff
+        ? await api.staff.update(editingStaff._id, payload)
+        : await api.staff.create(payload);
+      setItems((current) =>
+        editingStaff
+          ? current.map((staff) => staff._id === editingStaff._id ? response.data : staff)
+          : [response.data, ...current],
+      );
       setRoleFilter(form.role);
       setStatusFilter("All");
       setQuery("");
       setForm(emptyStaffForm());
+      setEditingStaff(null);
       setFormVisible(false);
-      Alert.alert("Staff added", "The staff member is now in your directory.");
+      Alert.alert(editingStaff ? "Staff updated" : "Staff added", editingStaff ? "The staff record has been updated." : "The staff member is now in your directory.");
     } catch (saveError) {
       Alert.alert("Unable to add staff", (saveError as Error).message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openEditStaff = (staff: StaffRecord) => {
+    setEditingStaff(staff);
+    setForm({
+      employeeId: staff.employeeId || "",
+      name: staff.name || "",
+      designation: staff.designation || "",
+      department: staff.department || "",
+      role: staff.role === "teacher" ? "teacher" : "staff",
+      contact: (staff.contact || "").replace(/\D/g, "").slice(-10),
+      email: staff.email || "",
+      address: staff.address || "",
+      qualification: staff.qualification || "",
+      joiningDate: staff.joiningDate ? String(staff.joiningDate).slice(0, 10) : "",
+      salary: staff.salary == null ? "" : String(staff.salary),
+      subjects: staff.subjects?.join(", ") || "",
+      status: staff.status || "Active",
+    });
+    setFormVisible(true);
+    setSelectedStaff(null);
+  };
+
+  const resignStaff = (staff: StaffRecord) => {
+    Alert.alert(
+      "Mark staff as resigned?",
+      `Mark ${displayName(staff)} as Resigned? Employment history will be preserved.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Mark Resigned",
+          style: "destructive",
+          onPress: () => {
+            void api.staff.remove(staff._id)
+              .then(({ data }) => {
+                setItems((current) => current.map((item) => item._id === staff._id ? data : item));
+                setSelectedStaff(data);
+              })
+              .catch((error: unknown) => Alert.alert("Unable to update staff status", error instanceof Error ? error.message : "Please try again."));
+          },
+        },
+      ],
+    );
+  };
+
+  const completeProfile = async () => {
+    if (!selectedStaff) return;
+    if (
+      !completeProfileForm.dob.trim() ||
+      !completeProfileForm.gender ||
+      !completeProfileForm.contact.trim() ||
+      !completeProfileForm.address.trim()
+    ) {
+      Alert.alert(
+        "Profile details required",
+        "Enter date of birth, gender, contact number, and address.",
+      );
+      return;
+    }
+    setProfileActionBusy(true);
+    try {
+      const { data } = await api.staff.completeProfile(selectedStaff._id, {
+        dob: completeProfileForm.dob.trim(),
+        gender: completeProfileForm.gender,
+        contact: completeProfileForm.contact.trim(),
+        address: completeProfileForm.address.trim(),
+      });
+      setItems((current) =>
+        current.map((staff) => staff._id === data._id ? data : staff),
+      );
+      setSelectedStaff(data);
+      setCompleteProfileVisible(false);
+      Alert.alert("Profile completed", "The staff profile has been updated.");
+    } catch (error) {
+      Alert.alert(
+        "Could not complete profile",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setProfileActionBusy(false);
+    }
+  };
+
+  const issueIdCard = async (staff: StaffRecord) => {
+    setProfileActionBusy(true);
+    try {
+      const { data } = await api.staff.issueIdCard(staff._id);
+      setItems((current) =>
+        current.map((item) => item._id === data._id ? data : item),
+      );
+      setSelectedStaff(data);
+      Alert.alert(
+        "ID card issued",
+        `ID card ${data.idCardNumber || ""} is ready.`,
+      );
+    } catch (error) {
+      Alert.alert(
+        "Could not issue ID card",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setProfileActionBusy(false);
     }
   };
 
@@ -266,7 +386,7 @@ export default function StaffScreen() {
       .sort((a, b) => displayName(a).localeCompare(displayName(b)));
   }, [items, query, roleFilter, statusFilter]);
 
-  if (!isSchoolAdmin || !can("staff:read")) {
+  if (!can("staff:read")) {
     return (
       <View style={styles.centered}>
         <Ionicons name="lock-closed-outline" size={28} color={colors.muted} />
@@ -295,7 +415,7 @@ export default function StaffScreen() {
       .map((assignment) => String(assignment.staffId)),
   ).size;
   const adminSupportCount = items.filter(
-    (staff) => staff.role === "admin-staff" || staff.role === "support",
+    (staff) => staff.role !== "teacher",
   ).length;
 
   return (
@@ -310,7 +430,11 @@ export default function StaffScreen() {
                 styles.addButton,
                 pressed && styles.pressed,
               ]}
-              onPress={() => setFormVisible(true)}
+              onPress={() => {
+                setEditingStaff(null);
+                setForm(emptyStaffForm());
+                setFormVisible(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Add staff"
             >
@@ -480,6 +604,11 @@ export default function StaffScreen() {
         }
         renderItem={({ item }) => {
           const name = displayName(item);
+          const staffAssignments = assignments.filter(
+            (assignment) =>
+              String(assignment.staffId) === item._id &&
+              assignment.status === "active",
+          );
           const status = item.status || "Active";
           const tone =
             status === "Active"
@@ -566,6 +695,32 @@ export default function StaffScreen() {
                 {item.qualification ? (
                   <Detail icon="ribbon-outline" value={item.qualification} />
                 ) : null}
+                {staffAssignments.length > 0 && (
+                  <>
+                    {staffAssignments.map((assignment) => (
+                      <Detail
+                        key={assignment._id}
+                        icon={assignment.type === "class_teacher" ? "school-outline" : "book-outline"}
+                        value={
+                          assignment.type === "class_teacher"
+                            ? `Class teacher · Class ${assignment.class || "—"}${assignment.section ? `-${assignment.section}` : ""}`
+                            : `${assignment.subject || "Teaching"} · Class ${assignment.class || "—"}${assignment.section ? `-${assignment.section}` : ""}`
+                        }
+                      />
+                    ))}
+                  </>
+                )}
+                {canWriteStaff && (
+                  <Pressable
+                    style={styles.editStaffButton}
+                    onPress={() => openEditStaff(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${name}`}
+                  >
+                    <Ionicons name="create-outline" size={15} color={colors.info} />
+                    <Text style={styles.editStaffText}>Edit staff record</Text>
+                  </Pressable>
+                )}
                 <View style={styles.cardAction}>
                   <Text style={styles.cardActionText}>View full profile</Text>
                   <Ionicons
@@ -593,13 +748,13 @@ export default function StaffScreen() {
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={() => setFormVisible(false)}
-            accessibilityLabel="Close add staff form"
+            accessibilityLabel="Close staff form"
           />
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalEyebrow}>NEW STAFF RECORD</Text>
-                <Text style={styles.modalTitle}>Add Staff</Text>
+                <Text style={styles.modalEyebrow}>{editingStaff ? "UPDATE STAFF RECORD" : "NEW STAFF RECORD"}</Text>
+                <Text style={styles.modalTitle}>{editingStaff ? "Edit Staff" : "Add Staff"}</Text>
               </View>
               <Pressable
                 onPress={() => setFormVisible(false)}
@@ -907,10 +1062,200 @@ export default function StaffScreen() {
                   label="ID card issued"
                   value={formatDate(selectedStaff.idCardIssuedAt)}
                 />
+                {canWriteStaff && (
+                  <View style={styles.profileActions}>
+                    {selectedStaff.profileStatus !== "complete" && (
+                      <Pressable
+                        style={styles.profileActionButton}
+                        onPress={() => {
+                          setCompleteProfileForm({
+                            dob: selectedStaff.dob
+                              ? String(selectedStaff.dob).slice(0, 10)
+                              : "",
+                            gender: selectedStaff.gender || "",
+                            contact: selectedStaff.contact || "",
+                            address: selectedStaff.address || "",
+                          });
+                          setCompleteProfileVisible(true);
+                        }}
+                      >
+                        <Ionicons
+                          name="checkmark-circle-outline"
+                          size={16}
+                          color="#fff"
+                        />
+                        <Text style={styles.profileActionText}>
+                          Complete profile
+                        </Text>
+                      </Pressable>
+                    )}
+                    {selectedStaff.profileStatus === "complete" &&
+                      !selectedStaff.idCardNumber && (
+                        <Pressable
+                          style={styles.profileActionButton}
+                          onPress={() => void issueIdCard(selectedStaff)}
+                          disabled={profileActionBusy}
+                        >
+                          <Ionicons
+                            name="card-outline"
+                            size={16}
+                            color="#fff"
+                          />
+                          <Text style={styles.profileActionText}>
+                            {profileActionBusy ? "Issuing..." : "Issue ID card"}
+                          </Text>
+                        </Pressable>
+                      )}
+                    <Pressable
+                      style={styles.profileActionButton}
+                      onPress={() => openEditStaff(selectedStaff)}
+                    >
+                      <Ionicons name="create-outline" size={16} color="#fff" />
+                      <Text style={styles.profileActionText}>Edit profile</Text>
+                    </Pressable>
+                    {selectedStaff.status !== "Resigned" && (
+                      <Pressable
+                        style={[
+                          styles.profileActionButton,
+                          styles.resignActionButton,
+                        ]}
+                        onPress={() => resignStaff(selectedStaff)}
+                      >
+                        <Ionicons
+                          name="person-remove-outline"
+                          size={16}
+                          color={colors.alert}
+                        />
+                        <Text
+                          style={[
+                            styles.profileActionText,
+                            { color: colors.alert },
+                          ]}
+                        >
+                          Mark resigned
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
               </ScrollView>
             </View>
           )}
         </View>
+      </Modal>
+
+      <Modal
+        visible={completeProfileVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCompleteProfileVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalRoot}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setCompleteProfileVisible(false)}
+            accessibilityLabel="Close complete profile form"
+          />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalEyebrow}>STAFF PROFILE</Text>
+                <Text style={styles.modalTitle}>Complete Profile</Text>
+              </View>
+              <Pressable
+                onPress={() => setCompleteProfileVisible(false)}
+                hitSlop={10}
+              >
+                <Ionicons name="close" size={24} color={colors.ink} />
+              </Pressable>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.formFields}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Date of birth (YYYY-MM-DD)</Text>
+                <Input
+                  value={completeProfileForm.dob}
+                  onChangeText={(dob) =>
+                    setCompleteProfileForm((current) => ({ ...current, dob }))
+                  }
+                  placeholder="YYYY-MM-DD"
+                />
+              </View>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Gender</Text>
+                <View style={styles.choiceRow}>
+                  {(["Male", "Female", "Other"] as const).map((gender) => (
+                    <Pressable
+                      key={gender}
+                      onPress={() =>
+                        setCompleteProfileForm((current) => ({
+                          ...current,
+                          gender,
+                        }))
+                      }
+                      style={[
+                        styles.choiceChip,
+                        completeProfileForm.gender === gender &&
+                          styles.choiceChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.choiceText,
+                          completeProfileForm.gender === gender &&
+                            styles.choiceTextActive,
+                        ]}
+                      >
+                        {gender}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Contact number</Text>
+                <Input
+                  value={completeProfileForm.contact}
+                  onChangeText={(contact) =>
+                    setCompleteProfileForm((current) => ({
+                      ...current,
+                      contact,
+                    }))
+                  }
+                  keyboardType="phone-pad"
+                  placeholder="+91 98765 43210"
+                />
+              </View>
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Address</Text>
+                <Input
+                  value={completeProfileForm.address}
+                  onChangeText={(address) =>
+                    setCompleteProfileForm((current) => ({
+                      ...current,
+                      address,
+                    }))
+                  }
+                  multiline
+                  placeholder="Residential address"
+                  style={styles.addressInput}
+                />
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <Button
+                title="Save Profile"
+                onPress={() => void completeProfile()}
+                loading={profileActionBusy}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1184,6 +1529,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardActionText: { color: colors.info, fontSize: 11, fontWeight: "700" },
+  editStaffButton: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", paddingVertical: 4 },
+  editStaffText: { color: colors.info, fontSize: 11, fontWeight: "700" },
   emptyTitle: {
     color: colors.ink,
     fontSize: 16,
@@ -1239,6 +1586,10 @@ const styles = StyleSheet.create({
   profileHeadingText: { flex: 1, minWidth: 0 },
   profileSubtitle: { color: colors.muted, fontSize: 12, marginTop: 3 },
   profileFields: { paddingTop: 15, paddingBottom: 12, gap: 7 },
+  profileActions: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 14 },
+  profileActionButton: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 9, backgroundColor: colors.ink, paddingHorizontal: 12, paddingVertical: 9 },
+  profileActionText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  resignActionButton: { backgroundColor: "#FFF1EF", borderWidth: 1, borderColor: "#F2C4C0" },
   profileBadges: {
     flexDirection: "row",
     flexWrap: "wrap",
