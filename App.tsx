@@ -29,6 +29,7 @@ import ModuleListScreen from "./src/screens/ModuleListScreen";
 import ModuleDetailScreen from "./src/screens/ModuleDetailScreen";
 import FormScreen from "./src/screens/FormScreen";
 import MarkAttendanceScreen from "./src/screens/MarkAttendanceScreen";
+import StudentAttendanceScreen from "./src/screens/StudentAttendanceScreen";
 import ExaminationScreen from "./src/screens/ExaminationScreen";
 import EditRecordScreen from "./src/screens/EditRecordScreen";
 import MarksEntryScreen from "./src/screens/MarksEntryScreen";
@@ -99,6 +100,8 @@ export type RootStackParams = {
   IdCard: undefined;
   UploadDocument: undefined;
   MarkAttendance: undefined;
+  Attendance: undefined;
+  AttendanceHistory: undefined;
   Examination: undefined;
   Staff: undefined;
   FeesCollection: undefined;
@@ -116,6 +119,8 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootStackParams>();
 const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   Dashboard: "grid",
+  Attendance: "calendar-outline",
+  "My Timetable": "time-outline",
   Schools: "business",
   Users: "people-circle",
   "Admission Enquiry": "person-add",
@@ -170,6 +175,20 @@ function SchoolTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      {user?.role === "student" && (
+        <Tab.Screen
+          name="Attendance"
+          component={StudentAttendanceScreen}
+          options={{ title: "Attendance" }}
+        />
+      )}
+      {user?.role === "student" && (
+        <Tab.Screen
+          name="My Timetable"
+          component={TimetableScreen}
+          options={{ title: "Timetable" }}
+        />
+      )}
       {isSchoolAdmin ? (
         can("admissions:read") && (
           <Tab.Screen
@@ -403,6 +422,11 @@ function Root() {
         name="MarkAttendance"
         component={MarkAttendanceScreen}
         options={{ title: "Attendance" }}
+      />
+      <Stack.Screen
+        name="AttendanceHistory"
+        component={StudentAttendanceScreen}
+        options={{ title: "My Attendance" }}
       />
       <Stack.Screen
         name="Examination"

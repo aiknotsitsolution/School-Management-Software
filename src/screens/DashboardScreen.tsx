@@ -45,6 +45,7 @@ type StudentDashboardData = {
   timetable: Row[];
   homework: Row[];
   exams: Row[];
+  holidays: CalendarHoliday[];
   marks: Row | null;
   submissions: Row[];
   invoices: FeeInvoiceRecord[];
@@ -53,12 +54,15 @@ type StudentDashboardData = {
   events: SchoolEvent[];
 };
 
+type CalendarHoliday = SchoolEvent & { source?: string };
+
 const emptyStudentData: StudentDashboardData = {
   profile: null,
   attendance: [],
   timetable: [],
   homework: [],
   exams: [],
+  holidays: [],
   marks: null,
   submissions: [],
   invoices: [],
@@ -67,10 +71,34 @@ const emptyStudentData: StudentDashboardData = {
   events: [],
 };
 
-const localDateKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const INDIA_TIME_ZONE = "Asia/Kolkata";
 
-const dateKeyOf = (value?: string) => String(value || "").slice(0, 10);
+const dateKeyInTimeZone = (date: Date, timeZone: string) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
+
+const indiaDateKey = (date = new Date()) =>
+  dateKeyInTimeZone(date, INDIA_TIME_ZONE);
+
+const dateKeyFromParts = (year: number, month: number, day: number) =>
+  `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+const dateKeyOf = (value?: string) => {
+  const dateValue = String(value || "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return dateValue;
+  const date = new Date(dateValue);
+  return Number.isNaN(date.getTime())
+    ? dateValue.slice(0, 10)
+    : dateKeyInTimeZone(date, INDIA_TIME_ZONE);
+};
 
 const WEEK_DAYS = [
   "Monday",
@@ -90,10 +118,15 @@ const formatPeriodTime = (value: unknown) => {
 
 const formatStudentDate = (value?: string) => {
   if (!value) return "Date not set";
-  const date = new Date(value);
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const date = new Date(isDateOnly ? `${value}T12:00:00Z` : value);
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    : date.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        timeZone: isDateOnly ? "UTC" : INDIA_TIME_ZONE,
+      });
 };
 
 function StudentDashboardScreen() {
@@ -105,18 +138,17 @@ function StudentDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [selectedTimetableDay, setSelectedTimetableDay] = useState(() => {
-    const currentDay = new Date().toLocaleDateString("en-US", {
+    const currentDay = new Intl.DateTimeFormat("en-US", {
       weekday: "long",
-    });
+      timeZone: INDIA_TIME_ZONE,
+    }).format(new Date());
     return WEEK_DAYS.includes(currentDay) ? currentDay : WEEK_DAYS[0];
   });
   const [calendarMonth, setCalendarMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
+    const [year, month] = indiaDateKey().split("-").map(Number);
+    return new Date(year, month - 1, 1);
   });
-  const [selectedDate, setSelectedDate] = useState(() =>
-    localDateKey(new Date()),
-  );
+  const [selectedDate, setSelectedDate] = useState(() => indiaDateKey());
 
   const moveCalendarMonth = (offset: number) => {
     const next = new Date(
@@ -130,9 +162,7 @@ function StudentDashboardScreen() {
       new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate(),
     );
     setCalendarMonth(next);
-    setSelectedDate(
-      localDateKey(new Date(next.getFullYear(), next.getMonth(), day)),
-    );
+    setSelectedDate(dateKeyFromParts(next.getFullYear(), next.getMonth() + 1, day));
   };
 
   const load = useCallback(async () => {
@@ -157,6 +187,7 @@ function StudentDashboardScreen() {
         api.notices.list(),
         get<unknown>("/homework/submissions"),
         api.events.list(),
+        get<CalendarHoliday[]>("/events/india-holidays"),
       ]);
       const labels = [
         "Attendance",
@@ -169,6 +200,7 @@ function StudentDashboardScreen() {
         "Notices",
         "Homework submissions",
         "School events",
+        "India holidays",
       ];
       const failures = results.flatMap((result, index) =>
         result.status === "rejected"
@@ -199,6 +231,7 @@ function StudentDashboardScreen() {
         notices: valueAt(7, []),
         submissions: extractList(valueAt<unknown>(8, [])),
         events: valueAt(9, []),
+        holidays: valueAt(10, []),
       });
       setLoadError(failures.join(" · "));
     } catch (error) {
@@ -217,7 +250,7 @@ function StudentDashboardScreen() {
     void load();
   }, [load]);
 
-  const today = localDateKey(new Date());
+  const today = indiaDateKey();
   const className = data.profile?.class || user?.class || "";
   const section = data.profile?.section || user?.section || "";
   const attendancePercent = data.attendance.length
@@ -257,10 +290,14 @@ function StudentDashboardScreen() {
     .slice(0, 3);
   const upcomingExams = data.exams
     .filter((item) => {
-      const date = String(item.date || "").slice(0, 10);
+      const date = dateKeyOf(String(item.date || ""));
       return date && date >= today;
     })
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .sort((a, b) =>
+      dateKeyOf(String(a.date || "")).localeCompare(
+        dateKeyOf(String(b.date || "")),
+      ),
+    )
     .slice(0, 2);
   const outstandingFees = data.invoices.reduce(
     (total, invoice) =>
@@ -283,9 +320,10 @@ function StudentDashboardScreen() {
       String(b.paidOn || "").localeCompare(String(a.paidOn || "")),
     )
     .slice(0, 3);
-  const todayName = new Date().toLocaleDateString("en-US", {
+  const todayName = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
-  });
+    timeZone: INDIA_TIME_ZONE,
+  }).format(new Date());
   const weekSchedules = WEEK_DAYS.map((day) => {
     const schedule = data.timetable.find(
       (item) => String(item.day || "").toLowerCase() === day.toLowerCase(),
@@ -361,48 +399,72 @@ function StudentDashboardScreen() {
       })[0];
   })();
   const upcomingEvents = data.events
-    .filter((event) => event.date && String(event.date).slice(0, 10) >= today)
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .filter((event) => event.date && dateKeyOf(event.date) >= today)
+    .sort((a, b) => dateKeyOf(a.date).localeCompare(dateKeyOf(b.date)))
     .slice(0, 3);
   const latestNotices = [...data.notices]
     .sort((a, b) =>
       String(b.createdAt || "").localeCompare(String(a.createdAt || "")),
     )
     .slice(0, 3);
-  const monthYear = calendarMonth.toLocaleDateString("en-IN", {
+  const monthYear = new Date(
+    Date.UTC(calendarMonth.getFullYear(), calendarMonth.getMonth(), 15, 12),
+  ).toLocaleDateString("en-IN", {
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   });
   const calendarCells: ({ day: number; dateKey: string } | null)[] = (() => {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
-    const leadingDays = (new Date(year, month, 1).getDay() + 6) % 7;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const leadingDays = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
     return [
       ...Array.from({ length: leadingDays }, () => null),
       ...Array.from({ length: daysInMonth }, (_, index) => {
         const day = index + 1;
         return {
           day,
-          dateKey: localDateKey(new Date(year, month, day)),
+          dateKey: dateKeyFromParts(year, month + 1, day),
         };
       }),
     ];
   })();
   const selectedDateObject = (() => {
     const [year, month, day] = selectedDate.split("-").map(Number);
-    return new Date(year, month - 1, day);
+    return new Date(Date.UTC(year, month - 1, day, 12));
   })();
   const selectedDateLabel = selectedDateObject.toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
     month: "long",
+    timeZone: "UTC",
   });
   const selectedAttendance = data.attendance.find(
     (record) => dateKeyOf(record.date) === selectedDate,
   );
   const selectedEvents = data.events.filter(
-    (event) => dateKeyOf(event.date) === selectedDate,
+    (event) =>
+      dateKeyOf(event.date) === selectedDate &&
+      String(event.category || "").toLowerCase() !== "holiday",
+  );
+  const selectedHolidayCandidates = [
+    ...data.holidays.filter(
+      (holiday) => dateKeyOf(holiday.date) === selectedDate,
+    ),
+    ...data.events.filter(
+      (event) =>
+        dateKeyOf(event.date) === selectedDate &&
+        String(event.category || "").toLowerCase() === "holiday",
+    ),
+  ];
+  const selectedHolidays = selectedHolidayCandidates.filter(
+    (holiday, index, holidays) =>
+      holidays.findIndex(
+        (candidate) =>
+          candidate.title === holiday.title &&
+          dateKeyOf(candidate.date) === dateKeyOf(holiday.date),
+      ) === index,
   );
   const selectedExams = data.exams.filter(
     (exam) => dateKeyOf(String(exam.date || "")) === selectedDate,
@@ -424,8 +486,24 @@ function StudentDashboardScreen() {
         label: "Attendance",
       });
     }
-    if (data.events.some((event) => dateKeyOf(event.date) === dateKey)) {
+    if (
+      data.events.some(
+        (event) =>
+          dateKeyOf(event.date) === dateKey &&
+          String(event.category || "").toLowerCase() !== "holiday",
+      )
+    ) {
       indicators.push({ color: colors.amber, label: "School event" });
+    }
+    if (
+      data.holidays.some((holiday) => dateKeyOf(holiday.date) === dateKey) ||
+      data.events.some(
+        (event) =>
+          dateKeyOf(event.date) === dateKey &&
+          String(event.category || "").toLowerCase() === "holiday",
+      )
+    ) {
+      indicators.push({ color: "#7B61A8", label: "Holiday" });
     }
     if (
       data.exams.some(
@@ -446,10 +524,11 @@ function StudentDashboardScreen() {
 
   const quickActions: {
     title: string;
-    route: "Timetable" | "Homework" | "ReportCard" | "OnlinePayment";
+    route: "AttendanceHistory" | "Timetable" | "Homework" | "ReportCard" | "OnlinePayment";
     icon: keyof typeof Ionicons.glyphMap;
     color: string;
   }[] = [
+    { title: "Attendance", route: "AttendanceHistory", icon: "calendar-outline", color: colors.success },
     { title: "Timetable", route: "Timetable", icon: "calendar-outline", color: colors.info },
     { title: "Homework", route: "Homework", icon: "book-outline", color: colors.amberDark },
     { title: "Results", route: "ReportCard", icon: "trophy-outline", color: colors.success },
@@ -487,7 +566,9 @@ function StudentDashboardScreen() {
             </View>
             <View>
               <Text style={s.calendarTitle}>School calendar</Text>
-              <Text style={s.calendarSubtitle}>Events and important dates</Text>
+              <Text style={s.calendarSubtitle}>
+                Events · India time · Monday start
+              </Text>
             </View>
           </View>
           <View style={s.calendarControls}>
@@ -504,9 +585,9 @@ function StudentDashboardScreen() {
             </Pressable>
             <Pressable
               onPress={() => {
-                const now = new Date();
-                setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
-                setSelectedDate(localDateKey(now));
+                const [year, month] = indiaDateKey().split("-").map(Number);
+                setCalendarMonth(new Date(year, month - 1, 1));
+                setSelectedDate(indiaDateKey());
               }}
               accessibilityRole="button"
               accessibilityLabel="Go to current month"
@@ -529,8 +610,8 @@ function StudentDashboardScreen() {
         </View>
         <Text style={s.monthLabel}>{monthYear}</Text>
         <View style={s.calendarGrid}>
-          {["M", "T", "W", "T", "F", "S", "S"].map((weekday, index) => (
-            <Text key={`${weekday}-${index}`} style={s.weekdayLabel}>
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
+            <Text key={weekday} style={s.weekdayLabel}>
               {weekday}
             </Text>
           ))}
@@ -581,6 +662,7 @@ function StudentDashboardScreen() {
           {[
             { label: "Attendance", color: colors.success },
             { label: "Event", color: colors.amber },
+            { label: "Holiday", color: "#7B61A8" },
             { label: "Exam", color: "#8B5CF6" },
             { label: "Homework", color: colors.info },
           ].map((item) => (
@@ -614,6 +696,19 @@ function StudentDashboardScreen() {
               </Text>
             </View>
           )}
+          {selectedHolidays.map((holiday, index) => (
+            <View
+              key={`holiday-${holiday._id || index}`}
+              style={s.agendaItem}
+            >
+              <View
+                style={[s.agendaMarker, { backgroundColor: "#7B61A8" }]}
+              />
+              <Text style={s.agendaText}>
+                {holiday.title || "India holiday"}
+              </Text>
+            </View>
+          ))}
           {selectedEvents.map((event, index) => (
             <View key={`event-${event._id || index}`} style={s.agendaItem}>
               <View
@@ -647,6 +742,7 @@ function StudentDashboardScreen() {
             </View>
           ))}
           {!selectedAttendance &&
+            !selectedHolidays.length &&
             !selectedEvents.length &&
             !selectedExams.length &&
             !selectedHomework.length && (
@@ -1050,11 +1146,16 @@ function StudentDashboardScreen() {
 
           <View style={s.sectionRow}>
             <Text style={s.section}>Attendance overview</Text>
-            <Text style={s.seeAll}>
-              {data.attendance.length
-                ? `${attendancePercent}% present`
-                : "No records yet"}
-            </Text>
+            <Pressable
+              onPress={() => navigation.navigate("AttendanceHistory")}
+              accessibilityRole="button"
+            >
+              <Text style={s.seeAll}>
+                {data.attendance.length
+                  ? `${attendancePercent}% · View history`
+                  : "View attendance"}
+              </Text>
+            </Pressable>
           </View>
           <Card>
             <TrendChart data={attendanceTrend} color={colors.info} />

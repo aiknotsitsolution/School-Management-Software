@@ -30,6 +30,7 @@ const NON_ACADEMIC_SUBJECTS: NamedOption[] = [
   "Recess",
 ].map((name) => ({ id: `non-academic:${name.toLowerCase()}`, name }));
 const DAY_COLORS = ["#5266D8", "#8A63C7", "#168A84", "#2984B9", "#C0782B", "#37885C"];
+const INDIA_TIME_ZONE = "Asia/Kolkata";
 const WEEKDAY_NAMES = [
   "Sunday",
   "Monday",
@@ -39,6 +40,11 @@ const WEEKDAY_NAMES = [
   "Friday",
   "Saturday",
 ];
+const currentSchoolDay = () =>
+  new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    timeZone: INDIA_TIME_ZONE,
+  }).format(new Date());
 const dateString = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
     date.getDate(),
@@ -93,6 +99,10 @@ export default function TimetableScreen() {
   const canWrite = can("timetable:write") && !isStudent;
   const [className, setClassName] = useState("");
   const [section, setSection] = useState("");
+  const [selectedStudentDay, setSelectedStudentDay] = useState(() => {
+    const day = currentSchoolDay();
+    return DAYS.includes(day) ? day : DAYS[0];
+  });
   const [substitutionExpanded, setSubstitutionExpanded] = useState(false);
   const [classes, setClasses] = useState<string[]>([]);
   const [sectionRows, setSectionRows] = useState<Row[]>([]);
@@ -186,8 +196,8 @@ export default function TimetableScreen() {
       get<Row>("/students/me")
         .then((response) => {
           if (!active) return;
-          const nextClass = String(response.data.class || "");
-          const nextSection = String(response.data.section || "");
+          const nextClass = String(response.data.class || user?.class || "");
+          const nextSection = String(response.data.section || user?.section || "");
           setClassName(nextClass);
           setSection(nextSection);
           void loadTimetable(nextClass, nextSection);
@@ -364,7 +374,7 @@ export default function TimetableScreen() {
     return () => {
       active = false;
     };
-  }, [isStudent, isTeacher, loadTimetable]);
+  }, [isStudent, isTeacher, loadTimetable, user?.class, user?.section]);
 
   useEffect(() => {
     if (!isStudent && className && section) {
@@ -1235,7 +1245,9 @@ export default function TimetableScreen() {
                 <Ionicons name="time-outline" size={18} color={colors.info} />
               </View>
               <View style={styles.weekCardHeading}>
-                <Text style={styles.weekCardTitle}>Weekly timetable</Text>
+                <Text style={styles.weekCardTitle}>
+                  {isStudent ? "My Timetable" : "Weekly timetable"}
+                </Text>
                 <Text style={styles.weekCardSubtitle}>
                   Class {className} · Section {section} · {totalPeriods} periods
                 </Text>
@@ -1251,9 +1263,61 @@ export default function TimetableScreen() {
                 </Pressable>
               ) : null}
             </View>
-            {DAYS.map((selectedDay, dayIndex) => {
+            {isStudent ? (
+              <View style={styles.studentDayPicker}>
+                <Text style={styles.weekSelectorTitle}>CHOOSE A DAY</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.weekDayList}
+                  accessibilityLabel="Filter timetable by day"
+                >
+                  {DAYS.map((day) => {
+                    const active = selectedStudentDay === day;
+                    const dayCount = periodsForDay(day).length;
+                    return (
+                      <Pressable
+                        key={day}
+                        onPress={() => setSelectedStudentDay(day)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={`${day}${day === currentSchoolDay() ? ", today" : ""}, ${dayCount} periods`}
+                        style={[styles.weekDay, active && styles.weekDayActive]}
+                      >
+                        <View style={styles.weekDayLabelRow}>
+                          <Text
+                            style={[
+                              styles.weekDayLabel,
+                              active && styles.weekDayLabelActive,
+                            ]}
+                          >
+                            {day === currentSchoolDay() ? "Today" : day.slice(0, 3)}
+                          </Text>
+                          {day === currentSchoolDay() ? (
+                            <View style={styles.todayDot} />
+                          ) : null}
+                        </View>
+                        <Text
+                          style={[
+                            styles.weekDayCount,
+                            active && styles.weekDayCountActive,
+                          ]}
+                        >
+                          {dayCount}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+            {(isStudent
+              ? DAYS.filter((day) => day === selectedStudentDay)
+              : DAYS
+            ).map((selectedDay, dayIndex) => {
               const dayPeriods = periodsForDay(selectedDay);
-              const dayColor = DAY_COLORS[dayIndex];
+              const dayColor =
+                DAY_COLORS[DAYS.indexOf(selectedDay)] || DAY_COLORS[dayIndex];
               return (
                 <View
                   key={selectedDay}
@@ -1269,7 +1333,7 @@ export default function TimetableScreen() {
                     <View style={styles.dayHeadingCopy}>
                       <View style={styles.dayTitleRow}>
                         <Text style={styles.dayTitle}>{selectedDay}</Text>
-                        {selectedDay === WEEKDAY_NAMES[new Date().getDay()] ? (
+                        {selectedDay === currentSchoolDay() ? (
                           <Text style={styles.todayBadge}>TODAY</Text>
                         ) : null}
                       </View>
@@ -2197,6 +2261,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E8ECF2",
     backgroundColor: "#fff",
+  },
+  studentDayPicker: {
+    gap: 8,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#E8ECF2",
+    backgroundColor: "#FBFCFE",
   },
   weekSelectorTitle: {
     color: colors.muted,

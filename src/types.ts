@@ -292,6 +292,7 @@ export interface AttendanceRecord {
   staffId?: string;
   date?: string;
   status: string;
+  remarks?: string;
 }
 export interface AttendanceClassSummary {
   class?: string;
