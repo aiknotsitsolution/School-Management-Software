@@ -40,11 +40,28 @@ const WEEKDAY_NAMES = [
   "Friday",
   "Saturday",
 ];
-const currentSchoolDay = () =>
+const currentSchoolDay = (date = new Date()) =>
   new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     timeZone: INDIA_TIME_ZONE,
-  }).format(new Date());
+  }).format(date);
+const schoolTimeMinutes = (date: Date) => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: INDIA_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  return Number.isFinite(hour) && Number.isFinite(minute)
+    ? hour * 60 + minute
+    : -1;
+};
+const periodTimeMinutes = (value: unknown) => {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(value || "").trim());
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+};
 const dateString = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
     date.getDate(),
@@ -103,6 +120,7 @@ export default function TimetableScreen() {
     const day = currentSchoolDay();
     return DAYS.includes(day) ? day : DAYS[0];
   });
+  const [now, setNow] = useState(() => new Date());
   const [substitutionExpanded, setSubstitutionExpanded] = useState(false);
   const [classes, setClasses] = useState<string[]>([]);
   const [sectionRows, setSectionRows] = useState<Row[]>([]);
@@ -144,6 +162,11 @@ export default function TimetableScreen() {
   const [substitutionSaving, setSubstitutionSaving] = useState(false);
   const [substitutionBusyId, setSubstitutionBusyId] = useState("");
   const [substitutionRefreshKey, setSubstitutionRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const classSections = useMemo(() => {
     if (isTeacher) {
@@ -434,6 +457,8 @@ export default function TimetableScreen() {
       ),
     [slots],
   );
+  const todayName = currentSchoolDay(now);
+  const currentMinutes = schoolTimeMinutes(now);
   const selectClass = (value: string) => {
     if (isTeacher) {
       const nextSection =
@@ -1281,7 +1306,7 @@ export default function TimetableScreen() {
                         onPress={() => setSelectedStudentDay(day)}
                         accessibilityRole="button"
                         accessibilityState={{ selected: active }}
-                        accessibilityLabel={`${day}${day === currentSchoolDay() ? ", today" : ""}, ${dayCount} periods`}
+                        accessibilityLabel={`${day}${day === todayName ? ", today" : ""}, ${dayCount} periods`}
                         style={[styles.weekDay, active && styles.weekDayActive]}
                       >
                         <View style={styles.weekDayLabelRow}>
@@ -1291,9 +1316,9 @@ export default function TimetableScreen() {
                               active && styles.weekDayLabelActive,
                             ]}
                           >
-                            {day === currentSchoolDay() ? "Today" : day.slice(0, 3)}
+                            {day === todayName ? "Today" : day.slice(0, 3)}
                           </Text>
-                          {day === currentSchoolDay() ? (
+                          {day === todayName ? (
                             <View style={styles.todayDot} />
                           ) : null}
                         </View>
@@ -1333,7 +1358,7 @@ export default function TimetableScreen() {
                     <View style={styles.dayHeadingCopy}>
                       <View style={styles.dayTitleRow}>
                         <Text style={styles.dayTitle}>{selectedDay}</Text>
-                        {selectedDay === currentSchoolDay() ? (
+                        {selectedDay === todayName ? (
                           <Text style={styles.todayBadge}>TODAY</Text>
                         ) : null}
                       </View>
@@ -1366,10 +1391,27 @@ export default function TimetableScreen() {
                   </View>
                   {dayPeriods.length ? (
                     <View style={styles.periodList}>
-                      {dayPeriods.map((period, index) => (
+                      {dayPeriods.map((period, index) => {
+                        const start = periodTimeMinutes(period.startTime);
+                        const end = periodTimeMinutes(period.endTime);
+                        const isCurrentPeriod =
+                          selectedDay === todayName &&
+                          start !== null &&
+                          end !== null &&
+                          currentMinutes >= start &&
+                          currentMinutes < end;
+                        return (
                         <View
                           key={`${selectedDay}-${index}`}
-                          style={styles.periodRow}
+                          style={[
+                            styles.periodRow,
+                            isCurrentPeriod && styles.currentPeriodRow,
+                          ]}
+                          accessibilityLabel={
+                            isCurrentPeriod
+                              ? `Current period: ${String(period.subject || "Class")}`
+                              : undefined
+                          }
                         >
                           <View style={styles.periodTimeline}>
                             <Text style={styles.periodStart}>
@@ -1382,7 +1424,22 @@ export default function TimetableScreen() {
                           </View>
                           <View style={[styles.periodDivider, { backgroundColor: dayColor }]} />
                           <View style={styles.periodDetails}>
-                            <Text style={styles.periodNumber}>PERIOD {index + 1}</Text>
+                            <View style={styles.periodTitleRow}>
+                              <Text
+                                style={[
+                                  styles.periodNumber,
+                                  isCurrentPeriod && styles.currentPeriodLabel,
+                                ]}
+                              >
+                                PERIOD {index + 1}
+                              </Text>
+                              {isCurrentPeriod ? (
+                                <View style={styles.nowBadge}>
+                                  <View style={styles.nowBadgeDot} />
+                                  <Text style={styles.nowBadgeText}>NOW</Text>
+                                </View>
+                              ) : null}
+                            </View>
                             <Text style={styles.subject}>
                               {String(period.subject || "—")}
                             </Text>
@@ -1442,7 +1499,8 @@ export default function TimetableScreen() {
                             </View>
                           ) : null}
                         </View>
-                      ))}
+                        );
+                      })}
                     </View>
                   ) : (
                     <Text style={styles.noPeriods}>
@@ -2386,6 +2444,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#FCFCFD",
   },
+  currentPeriodRow: {
+    borderColor: colors.success,
+    backgroundColor: "#F0FAF2",
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 2,
+  },
   periodTimeline: {
     width: 65,
     minHeight: 56,
@@ -2400,6 +2467,28 @@ const styles = StyleSheet.create({
   periodEnd: { color: colors.muted, fontSize: 9, fontWeight: "700" },
   periodDivider: { width: 3, alignSelf: "stretch", borderRadius: 3, backgroundColor: colors.amber },
   periodDetails: { flex: 1, gap: 4 },
+  periodTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  nowBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 7,
+    backgroundColor: "#DDF3E3",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  nowBadgeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.success,
+  },
+  nowBadgeText: { color: colors.success, fontSize: 8, fontWeight: "900" },
   periodActions: { gap: 5 },
   periodAction: {
     width: 30,
@@ -2418,6 +2507,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   periodNumber: { color: colors.muted, fontSize: 8, fontWeight: "800", letterSpacing: 0.7 },
+  currentPeriodLabel: { color: colors.success },
   subject: { color: colors.ink, fontSize: 14, fontWeight: "900" },
   periodMeta: { flexDirection: "column", flexWrap: "wrap", gap: 4, marginTop: 1 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
