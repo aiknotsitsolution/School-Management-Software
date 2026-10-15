@@ -17,7 +17,8 @@
           "photosPermission": "Allow Zipschool OS to access your photos for profile pictures and documents.",
           "cameraPermission": "Allow Zipschool OS to use the camera to take photos."
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }
