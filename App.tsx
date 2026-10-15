@@ -217,7 +217,6 @@ function SchoolTabs() {
           {can("students:read") && (
             <Tab.Screen name="Students" component={StudentsScreen} />
           )}
-          <Tab.Screen name="Notices" component={NoticesScreen} />
         </>
       )}
       {isSchoolAdmin && can("staff:read") && (
