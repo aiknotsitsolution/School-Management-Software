@@ -134,7 +134,21 @@ export default function MoreScreen() {
                   <Text style={s.label}>Timetable</Text>
                 </Pressable>
               )}
-              {(can("exams:read") || can("exams:write")) && (
+              {isStudent ? (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("StudentExams")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="clipboard"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Exams</Text>
+                </Pressable>
+              ) : (can("exams:read") || can("exams:write")) ? (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("Examination")}
@@ -148,7 +162,7 @@ export default function MoreScreen() {
                   </View>
                   <Text style={s.label}>Examination</Text>
                 </Pressable>
-              )}
+              ) : null}
               {(can("exams:read") || can("exams:write")) && (
                 <Pressable
                   style={s.tile}
@@ -257,16 +271,18 @@ export default function MoreScreen() {
               {(can("marks:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
-                  onPress={() => nav.navigate("ReportCard")}
+                  onPress={() =>
+                    nav.navigate(isStudent ? "StudentResults" : "ReportCard")
+                  }
                 >
                   <View style={s.icon}>
                     <Ionicons
-                      name="school"
+                      name={isStudent ? "bar-chart" : "school"}
                       size={22}
                       color={colors.amberDark}
                     />
                   </View>
-                  <Text style={s.label}>Report Card</Text>
+                  <Text style={s.label}>{isStudent ? "Results" : "Report Card"}</Text>
                 </Pressable>
               )}
               {isStudent && (

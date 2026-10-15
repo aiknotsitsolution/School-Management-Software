@@ -32,6 +32,7 @@ import MarkAttendanceScreen from "./src/screens/MarkAttendanceScreen";
 import StudentAttendanceScreen from "./src/screens/StudentAttendanceScreen";
 import StudentAchievementsScreen from "./src/screens/StudentAchievementsScreen";
 import ExaminationScreen from "./src/screens/ExaminationScreen";
+import StudentExamsScreen from "./src/screens/StudentExamsScreen";
 import EditRecordScreen from "./src/screens/EditRecordScreen";
 import MarksEntryScreen from "./src/screens/MarksEntryScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
@@ -41,6 +42,7 @@ import SubscriptionScreen from "./src/screens/SubscriptionScreen";
 import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
 import TimetableScreen from "./src/screens/TimetableScreen";
 import ReportCardScreen from "./src/screens/ReportCardScreen";
+import StudentResultsScreen from "./src/screens/StudentResultsScreen";
 import GradingScalesScreen from "./src/screens/GradingScalesScreen";
 import SyllabusScreen from "./src/screens/SyllabusScreen";
 import LibraryScreen from "./src/screens/LibraryScreen";
@@ -85,6 +87,7 @@ export type RootStackParams = {
   MarksEntry: undefined;
   Timetable: undefined;
   ReportCard: undefined;
+  StudentResults: undefined;
   GradingScales: undefined;
   Syllabus: undefined;
   Library: undefined;
@@ -102,6 +105,7 @@ export type RootStackParams = {
   AttendanceHistory: undefined;
   Achievements: undefined;
   Examination: undefined;
+  StudentExams: undefined;
   Staff: undefined;
   FeesCollection: undefined;
   ManageSchool: undefined;
@@ -354,6 +358,11 @@ function Root() {
         options={{ title: "Report Card" }}
       />
       <Stack.Screen
+        name="StudentResults"
+        component={StudentResultsScreen}
+        options={{ title: "My Results" }}
+      />
+      <Stack.Screen
         name="GradingScales"
         component={GradingScalesScreen}
         options={{ title: "Grading Scales" }}
@@ -438,6 +447,11 @@ function Root() {
         name="Examination"
         component={ExaminationScreen}
         options={{ title: "Examination" }}
+      />
+      <Stack.Screen
+        name="StudentExams"
+        component={StudentExamsScreen}
+        options={{ title: "My Examinations" }}
       />
       <Stack.Screen
         name="Homework"
