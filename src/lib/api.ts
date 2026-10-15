@@ -41,6 +41,7 @@ import type {
   TeacherAssignment,
   TimetableSubstitution,
   TransportRoute,
+  TransportStop,
   User,
 } from "../types";
 
@@ -542,6 +543,61 @@ export const api = {
     list: (query = "") =>
       request<TransportRoute[]>(`/transport${query ? `?${query}` : ""}`),
     mine: () => request<TransportRoute[]>("/transport/me"),
+    create: (payload: Partial<TransportRoute>) =>
+      send<TransportRoute>("/transport", "POST", payload),
+    update: (id: string, payload: Partial<TransportRoute>) =>
+      send<TransportRoute>(
+        `/transport/${encodeURIComponent(id)}`,
+        "PATCH",
+        payload,
+      ),
+    updateLocation: (id: string, payload: { lat: number; lng: number }) =>
+      send<TransportRoute>(
+        `/transport/${encodeURIComponent(id)}/location`,
+        "PATCH",
+        payload,
+      ),
+    searchPlaces: (query: string) =>
+      request<{
+        results?: { id?: string; label?: string; name?: string; lat: number; lng: number }[];
+        attribution?: string | null;
+      }>(`/transport/places/search?q=${encodeURIComponent(query)}`),
+    reversePlace: (lat: number, lng: number) =>
+      request<{ label?: string; name?: string; lat?: number; lng?: number } | null>(
+        `/transport/places/reverse?lat=${lat}&lng=${lng}`,
+      ),
+    previewPlan: (id: string | null, stops: TransportStop[]) =>
+      send<{
+        totalKm?: number | null;
+        totalMinutes?: number | null;
+        legs?: {
+          fromStop?: string;
+          toStop?: string;
+          km?: number | null;
+          minutes?: number | null;
+        }[];
+      }>(
+        id
+          ? `/transport/${encodeURIComponent(id)}/plan/preview`
+          : "/transport/plan/preview",
+        "POST",
+        { stops },
+      ),
+    devices: () =>
+      request<{
+        devices?: { id: string; name?: string }[];
+      }>("/transport/devices"),
+    bindDevice: (id: string, deviceId: string) =>
+      send<TransportRoute>(
+        `/transport/${encodeURIComponent(id)}/bind-device`,
+        "POST",
+        { deviceId },
+      ),
+    unbindDevice: (id: string) =>
+      request<TransportRoute>(
+        `/transport/${encodeURIComponent(id)}/bind-device`,
+        { method: "DELETE" },
+      ),
     trackingStatus: () =>
       request<{
         providers?: {

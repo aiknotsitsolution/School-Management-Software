@@ -18,6 +18,12 @@
           "cameraPermission": "Allow Zipschool OS to use the camera to take photos."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Zipschool OS to use your location when you update a bus position."
+        }
+      ],
       "expo-sharing"
     ]
   }

@@ -10,6 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
+import TransportDashboardScreen from "./src/screens/TransportDashboardScreen";
 import SchoolsManagementScreen from "./src/screens/SchoolsManagementScreen";
 import SchoolOnboardingScreen from "./src/screens/SchoolOnboardingScreen";
 import PlatformUsersScreen from "./src/screens/PlatformUsersScreen";
@@ -54,6 +55,7 @@ import InventoryScreen from "./src/screens/InventoryScreen";
 import HostelScreen from "./src/screens/HostelScreen";
 import { NotificationsProvider } from "./src/context/NotificationsContext";
 import BusTrackingScreen from "./src/screens/BusTrackingScreen";
+import BusRoutesScreen from "./src/screens/BusRoutesScreen";
 import IdCardScreen from "./src/screens/IdCardScreen";
 import UploadDocumentScreen from "./src/screens/UploadDocumentScreen";
 import StudentDocumentsScreen from "./src/screens/StudentDocumentsScreen";
@@ -127,6 +129,8 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootStackParams>();
 const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   Dashboard: "grid",
+  "Bus Tracking": "bus-outline",
+  "Bus Routes": "map-outline",
   Attendance: "calendar-outline",
   "My Timetable": "time-outline",
   Schools: "business",
@@ -171,8 +175,11 @@ function SchoolTabs() {
   const { can } = useAuth();
   const { user } = useAuth();
   const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
+  const isTransportCoordinator =
+    user?.role === "staff" && user.designation === "transport";
   return (
     <Tab.Navigator
+      initialRouteName={isTransportCoordinator ? "Bus Tracking" : "Dashboard"}
       screenOptions={({ route }) => ({
         ...header,
         tabBarActiveTintColor: colors.ink,
@@ -182,7 +189,27 @@ function SchoolTabs() {
         ),
       })}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen
+        name="Dashboard"
+        component={
+          isTransportCoordinator ? TransportDashboardScreen : DashboardScreen
+        }
+        options={{ title: isTransportCoordinator ? "Transport" : "Dashboard" }}
+      />
+      {isTransportCoordinator && (
+        <Tab.Screen
+          name="Bus Tracking"
+          component={BusTrackingScreen}
+          options={{ title: "Bus Tracking" }}
+        />
+      )}
+      {isTransportCoordinator && (
+        <Tab.Screen
+          name="Bus Routes"
+          component={BusRoutesScreen}
+          options={{ title: "Bus Routes" }}
+        />
+      )}
       {user?.role === "student" && (
         <Tab.Screen
           name="Attendance"
@@ -214,7 +241,7 @@ function SchoolTabs() {
         )
       ) : (
         <>
-          {can("students:read") && (
+          {!isTransportCoordinator && can("students:read") && (
             <Tab.Screen name="Students" component={StudentsScreen} />
           )}
         </>
