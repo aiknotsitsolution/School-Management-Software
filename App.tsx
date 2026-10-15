@@ -30,6 +30,7 @@ import ModuleDetailScreen from "./src/screens/ModuleDetailScreen";
 import FormScreen from "./src/screens/FormScreen";
 import MarkAttendanceScreen from "./src/screens/MarkAttendanceScreen";
 import StudentAttendanceScreen from "./src/screens/StudentAttendanceScreen";
+import StudentAchievementsScreen from "./src/screens/StudentAchievementsScreen";
 import ExaminationScreen from "./src/screens/ExaminationScreen";
 import EditRecordScreen from "./src/screens/EditRecordScreen";
 import MarksEntryScreen from "./src/screens/MarksEntryScreen";
@@ -102,6 +103,7 @@ export type RootStackParams = {
   MarkAttendance: undefined;
   Attendance: undefined;
   AttendanceHistory: undefined;
+  Achievements: undefined;
   Examination: undefined;
   Staff: undefined;
   FeesCollection: undefined;
@@ -427,6 +429,11 @@ function Root() {
         name="AttendanceHistory"
         component={StudentAttendanceScreen}
         options={{ title: "My Attendance" }}
+      />
+      <Stack.Screen
+        name="Achievements"
+        component={StudentAchievementsScreen}
+        options={{ title: "My Achievements" }}
       />
       <Stack.Screen
         name="Examination"

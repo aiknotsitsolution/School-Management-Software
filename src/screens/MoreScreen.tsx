@@ -253,6 +253,21 @@ export default function MoreScreen() {
                   <Text style={s.label}>Report Card</Text>
                 </Pressable>
               )}
+              {isStudent && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Achievements")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="trophy"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Achievements</Text>
+                </Pressable>
+              )}
               {(can("homework:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
