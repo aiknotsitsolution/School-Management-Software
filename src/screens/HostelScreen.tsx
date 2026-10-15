@@ -71,7 +71,9 @@ function parseRoom(value: Row): HostelRoom {
     typeof value.block !== "string" ||
     !Number.isFinite(Number(value.capacity))
   ) {
-    throw new Error("A hostel room is missing required room or capacity details.");
+    throw new Error(
+      "A hostel room is missing required room or capacity details.",
+    );
   }
   const occupants = Array.isArray(value.occupants)
     ? value.occupants.map((occupant) =>
@@ -171,7 +173,12 @@ function SearchPicker({
     value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
   );
   return (
-    <Modal visible={!!picker} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={!!picker}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <View style={s.modalBackdrop}>
         <View style={s.pickerCard}>
           <View style={s.modalHeader}>
@@ -204,7 +211,11 @@ function SearchPicker({
                 }}
               >
                 <Text style={s.pickerText}>{item}</Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={colors.muted}
+                />
               </Pressable>
             )}
             ListEmptyComponent={
@@ -218,7 +229,8 @@ function SearchPicker({
 }
 
 export default function HostelScreen() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const isStudent = user?.role === "student";
   const canManage = can("hostel:manage");
   const canReadStudents = can("students:read");
   const [rooms, setRooms] = useState<HostelRoom[]>([]);
@@ -238,62 +250,78 @@ export default function HostelScreen() {
   const [pickerSearch, setPickerSearch] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async (refresh = false) => {
-    if (refresh) setRefreshing(true);
-    else setLoading(true);
-    setLoadError("");
-    setStudentError("");
-    try {
-      const [roomResult, studentResult] = await Promise.allSettled([
-        get<unknown>("/hostel?limit=1000&page=1"),
-        canReadStudents ? get<unknown>("/students?limit=1000&page=1") : Promise.resolve(null),
-      ]);
-      if (roomResult.status === "rejected") throw roomResult.reason;
-      const roomRows = responseRows(roomResult.value.data);
-      const totalPages = isRecord(roomResult.value) && typeof roomResult.value.pages === "number"
-        ? Math.max(1, roomResult.value.pages)
-        : 1;
-      const additionalRooms = await Promise.all(
-        Array.from({ length: totalPages - 1 }, (_, index) =>
-          get<unknown>(`/hostel?limit=1000&page=${index + 2}`),
-        ),
-      );
-      setRooms(
-        [...roomRows, ...additionalRooms.flatMap((response) => responseRows(response.data))]
-          .map(parseRoom),
-      );
-      if (studentResult.status === "fulfilled" && studentResult.value) {
-        const result = studentResult.value;
-        const studentRows = responseRows(result.data);
-        const studentPages = isRecord(result) && typeof result.pages === "number"
-          ? Math.max(1, result.pages)
-          : 1;
-        const additionalStudents = await Promise.all(
-          Array.from({ length: studentPages - 1 }, (_, index) =>
-            get<unknown>(`/students?limit=1000&page=${index + 2}`),
+  const load = useCallback(
+    async (refresh = false) => {
+      if (refresh) setRefreshing(true);
+      else setLoading(true);
+      setLoadError("");
+      setStudentError("");
+      try {
+        const [roomResult, studentResult] = await Promise.allSettled([
+          get<unknown>("/hostel?limit=1000&page=1"),
+          canReadStudents
+            ? get<unknown>("/students?limit=1000&page=1")
+            : Promise.resolve(null),
+        ]);
+        if (roomResult.status === "rejected") throw roomResult.reason;
+        const roomRows = responseRows(roomResult.value.data);
+        const totalPages =
+          isRecord(roomResult.value) &&
+          typeof roomResult.value.pages === "number"
+            ? Math.max(1, roomResult.value.pages)
+            : 1;
+        const additionalRooms = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, index) =>
+            get<unknown>(`/hostel?limit=1000&page=${index + 2}`),
           ),
         );
-        const rows = [
-          ...studentRows,
-          ...additionalStudents.flatMap((response) => responseRows(response.data)),
-        ];
-        setStudents(studentChoices(rows));
-      } else if (studentResult.status === "rejected") {
-        setStudentError(
-          studentResult.reason instanceof Error
-            ? studentResult.reason.message
-            : "Could not load students.",
+        setRooms(
+          [
+            ...roomRows,
+            ...additionalRooms.flatMap((response) =>
+              responseRows(response.data),
+            ),
+          ].map(parseRoom),
         );
+        if (studentResult.status === "fulfilled" && studentResult.value) {
+          const result = studentResult.value;
+          const studentRows = responseRows(result.data);
+          const studentPages =
+            isRecord(result) && typeof result.pages === "number"
+              ? Math.max(1, result.pages)
+              : 1;
+          const additionalStudents = await Promise.all(
+            Array.from({ length: studentPages - 1 }, (_, index) =>
+              get<unknown>(`/students?limit=1000&page=${index + 2}`),
+            ),
+          );
+          const rows = [
+            ...studentRows,
+            ...additionalStudents.flatMap((response) =>
+              responseRows(response.data),
+            ),
+          ];
+          setStudents(studentChoices(rows));
+        } else if (studentResult.status === "rejected") {
+          setStudentError(
+            studentResult.reason instanceof Error
+              ? studentResult.reason.message
+              : "Could not load students.",
+          );
+        }
+      } catch (error) {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Could not load hostel rooms.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : "Could not load hostel rooms.",
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [canReadStudents]);
+    },
+    [canReadStudents],
+  );
 
   useEffect(() => {
     void load();
@@ -307,12 +335,18 @@ export default function HostelScreen() {
     }
     return names;
   }, [students]);
-  const totalStudents = rooms.reduce((total, item) => total + item.occupants.length, 0);
-  const occupiedRooms = rooms.filter((item) => item.occupants.length > 0).length;
+  const totalStudents = rooms.reduce(
+    (total, item) => total + item.occupants.length,
+    0,
+  );
+  const occupiedRooms = rooms.filter(
+    (item) => item.occupants.length > 0,
+  ).length;
   const totalCapacity = rooms.reduce((total, item) => total + item.capacity, 0);
   const availableBeds = Math.max(0, totalCapacity - totalStudents);
   const filteredRooms = useMemo(
-    () => rooms.filter((item) => wingFilter === "All" || item.wing === wingFilter),
+    () =>
+      rooms.filter((item) => wingFilter === "All" || item.wing === wingFilter),
     [rooms, wingFilter],
   );
   const housedStudentIds = useMemo(
@@ -320,7 +354,12 @@ export default function HostelScreen() {
     [rooms],
   );
   const availableStudents = useMemo(
-    () => students.filter((student) => !housedStudentIds.has(student.admissionNo) && !housedStudentIds.has(student.id)),
+    () =>
+      students.filter(
+        (student) =>
+          !housedStudentIds.has(student.admissionNo) &&
+          !housedStudentIds.has(student.id),
+      ),
     [housedStudentIds, students],
   );
   const availableRooms = useMemo(
@@ -342,11 +381,17 @@ export default function HostelScreen() {
       return;
     }
     if (!availableRooms.length) {
-      Alert.alert("No vacant beds", "Add a room or move a student out before allotting a room.");
+      Alert.alert(
+        "No vacant beds",
+        "Add a room or move a student out before allotting a room.",
+      );
       return;
     }
     if (!availableStudents.length) {
-      Alert.alert("No available students", "All loaded students are already allotted, or no students are available.");
+      Alert.alert(
+        "No available students",
+        "All loaded students are already allotted, or no students are available.",
+      );
       return;
     }
     setSelectedStudentId("");
@@ -367,7 +412,10 @@ export default function HostelScreen() {
       return;
     }
     if (!Number.isInteger(capacity) || capacity < 1) {
-      Alert.alert("Invalid capacity", "Capacity must be a positive whole number.");
+      Alert.alert(
+        "Invalid capacity",
+        "Capacity must be a positive whole number.",
+      );
       return;
     }
     const roomNo = getNextRoomNo(rooms);
@@ -380,12 +428,16 @@ export default function HostelScreen() {
         wing: room.wing,
         capacity,
       });
-      if (!isRecord(response.data)) throw new Error("The server did not return the created room.");
+      if (!isRecord(response.data))
+        throw new Error("The server did not return the created room.");
       setRooms((current) => [parseRoom(response.data as Row), ...current]);
       setRoomModal(false);
       Alert.alert("Room added", `${roomNo} is ready for student allotment.`);
     } catch (error) {
-      Alert.alert("Could not add room", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not add room",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -403,8 +455,14 @@ export default function HostelScreen() {
       Alert.alert("Room is full", "Select a room with a vacant bed.");
       return;
     }
-    if (housedStudentIds.has(student.admissionNo) || housedStudentIds.has(student.id)) {
-      Alert.alert("Already allotted", "This student already has a hostel room.");
+    if (
+      housedStudentIds.has(student.admissionNo) ||
+      housedStudentIds.has(student.id)
+    ) {
+      Alert.alert(
+        "Already allotted",
+        "This student already has a hostel room.",
+      );
       return;
     }
     setBusy(true);
@@ -414,13 +472,22 @@ export default function HostelScreen() {
         "PATCH",
         { studentId: student.admissionNo },
       );
-      if (!isRecord(response.data)) throw new Error("The server did not return the updated room.");
+      if (!isRecord(response.data))
+        throw new Error("The server did not return the updated room.");
       const updated = parseRoom(response.data as Row);
-      setRooms((current) => current.map((item) => item._id === updated._id ? updated : item));
+      setRooms((current) =>
+        current.map((item) => (item._id === updated._id ? updated : item)),
+      );
       setAllotModal(false);
-      Alert.alert("Student allotted", `${student.name} allotted to room ${targetRoom.roomNo}.`);
+      Alert.alert(
+        "Student allotted",
+        `${student.name} allotted to room ${targetRoom.roomNo}.`,
+      );
     } catch (error) {
-      Alert.alert("Could not allot student", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not allot student",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -445,9 +512,14 @@ export default function HostelScreen() {
                 "PATCH",
                 { studentId },
               );
-              if (!isRecord(response.data)) throw new Error("The server did not return the updated room.");
+              if (!isRecord(response.data))
+                throw new Error("The server did not return the updated room.");
               const updated = parseRoom(response.data as Row);
-              setRooms((current) => current.map((item) => item._id === updated._id ? updated : item));
+              setRooms((current) =>
+                current.map((item) =>
+                  item._id === updated._id ? updated : item,
+                ),
+              );
             } catch (error) {
               Alert.alert(
                 "Could not move student out",
@@ -465,7 +537,10 @@ export default function HostelScreen() {
   const deleteRoom = (targetRoom: HostelRoom) => {
     if (!canManage || busy) return;
     if (targetRoom.occupants.length) {
-      Alert.alert("Room is occupied", "Move all occupants out before deleting this room.");
+      Alert.alert(
+        "Room is occupied",
+        "Move all occupants out before deleting this room.",
+      );
       return;
     }
     Alert.alert(
@@ -479,8 +554,13 @@ export default function HostelScreen() {
           onPress: async () => {
             setBusy(true);
             try {
-              await send(`/hostel/${encodeURIComponent(targetRoom._id)}`, "DELETE");
-              setRooms((current) => current.filter((item) => item._id !== targetRoom._id));
+              await send(
+                `/hostel/${encodeURIComponent(targetRoom._id)}`,
+                "DELETE",
+              );
+              setRooms((current) =>
+                current.filter((item) => item._id !== targetRoom._id),
+              );
             } catch (error) {
               Alert.alert(
                 "Could not delete room",
@@ -501,7 +581,112 @@ export default function HostelScreen() {
   };
 
   if (loading) {
-    return <ActivityIndicator style={{ flex: 1 }} size="large" color={colors.ink} />;
+    return (
+      <ActivityIndicator style={{ flex: 1 }} size="large" color={colors.ink} />
+    );
+  }
+
+  if (isStudent) {
+    const room = rooms[0] || null;
+    return (
+      <ScrollView
+        style={s.screen}
+        contentContainerStyle={s.studentContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void load(true)}
+            tintColor={colors.info}
+          />
+        }
+      >
+        <View style={s.studentHero}>
+          <View style={s.studentHeroIcon}>
+            <Ionicons name="bed-outline" size={23} color={colors.amberDark} />
+          </View>
+          <Text style={s.studentEyebrow}>RESIDENCE</Text>
+          <Text style={s.studentTitle}>My Hostel</Text>
+          <Text style={s.studentSubtitle}>
+            Your room allotment as recorded by the hostel office.
+          </Text>
+        </View>
+
+        {loadError ? (
+          <Card style={s.errorCard}>
+            <Ionicons
+              name="cloud-offline-outline"
+              size={24}
+              color={colors.alert}
+            />
+            <Text style={s.errorText}>{loadError}</Text>
+            <Pressable onPress={() => void load()}>
+              <Text style={s.retryText}>Try again</Text>
+            </Pressable>
+          </Card>
+        ) : room ? (
+          <Card style={s.studentRoomCard}>
+            <View style={s.studentRoomHeading}>
+              <View style={s.studentRoomIcon}>
+                <Ionicons name="bed" size={20} color={colors.info} />
+              </View>
+              <View style={s.studentRoomCopy}>
+                <Text style={s.studentRoomTitle}>Room {room.roomNo}</Text>
+                <Text style={s.studentRoomSubtitle}>
+                  Block {room.block} · Wing {room.wing}
+                </Text>
+              </View>
+              <View style={s.allottedBadge}>
+                <Text style={s.allottedText}>Allotted</Text>
+              </View>
+            </View>
+            <View style={s.studentDetails}>
+              <StudentRoomDetail
+                icon="business-outline"
+                label="Block"
+                value={room.block}
+              />
+              <StudentRoomDetail
+                icon="layers-outline"
+                label="Floor"
+                value={String(room.floor)}
+              />
+              <StudentRoomDetail
+                icon="people-outline"
+                label="Capacity"
+                value={`${room.occupants.length} / ${room.capacity} occupied`}
+              />
+              {room.warden ? (
+                <StudentRoomDetail
+                  icon="person-outline"
+                  label="Warden"
+                  value={room.warden}
+                />
+              ) : null}
+            </View>
+          </Card>
+        ) : (
+          <Card style={s.studentEmptyCard}>
+            <Ionicons name="bed-outline" size={38} color={colors.muted} />
+            <Text style={s.studentEmptyTitle}>No hostel allotment</Text>
+            <Text style={s.studentSubtitleText}>
+              You are not currently allotted a hostel room.
+            </Text>
+          </Card>
+        )}
+
+        <View style={s.studentNote}>
+          <Ionicons
+            name="information-circle-outline"
+            size={17}
+            color={colors.info}
+          />
+          <Text style={s.studentNoteText}>
+            You can only see rooms allotted to you. For changes, contact the
+            hostel office.
+          </Text>
+        </View>
+      </ScrollView>
+    );
   }
 
   return (
@@ -509,7 +694,11 @@ export default function HostelScreen() {
       <ScrollView
         contentContainerStyle={s.content}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.ink} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void load(true)}
+            tintColor={colors.ink}
+          />
         }
       >
         <View style={s.hero}>
@@ -519,7 +708,10 @@ export default function HostelScreen() {
             </View>
             {canManage && (
               <View style={s.heroActions}>
-                <Pressable style={s.secondaryHeroButton} onPress={() => openAllotForm()}>
+                <Pressable
+                  style={s.secondaryHeroButton}
+                  onPress={() => openAllotForm()}
+                >
                   <Ionicons name="person-add" size={15} color="#fff" />
                   <Text style={s.secondaryHeroText}>Allot</Text>
                 </Pressable>
@@ -532,12 +724,18 @@ export default function HostelScreen() {
           </View>
           <Text style={s.eyebrow}>OPERATIONS</Text>
           <Text style={s.title}>Hostel Management</Text>
-          <Text style={s.subtitle}>Manage hostel rooms, student allotments and available beds.</Text>
+          <Text style={s.subtitle}>
+            Manage hostel rooms, student allotments and available beds.
+          </Text>
         </View>
 
         {!!loadError && (
           <Card style={s.errorCard}>
-            <Ionicons name="cloud-offline-outline" size={24} color={colors.alert} />
+            <Ionicons
+              name="cloud-offline-outline"
+              size={24}
+              color={colors.alert}
+            />
             <Text style={s.errorText}>{loadError}</Text>
             <Pressable onPress={() => void load()}>
               <Text style={s.retryText}>Retry</Text>
@@ -547,7 +745,11 @@ export default function HostelScreen() {
 
         {!!studentError && (
           <Card style={s.warningCard}>
-            <Ionicons name="information-circle-outline" size={20} color={colors.info} />
+            <Ionicons
+              name="information-circle-outline"
+              size={20}
+              color={colors.info}
+            />
             <Text style={s.warningText}>
               Student list unavailable: {studentError}
             </Text>
@@ -557,10 +759,30 @@ export default function HostelScreen() {
         {!loadError && (
           <>
             <View style={s.summaryGrid}>
-              <SummaryCard label="Hostel students" value={totalStudents} icon="people" color={colors.ink} />
-              <SummaryCard label="Occupied rooms" value={`${occupiedRooms}/${rooms.length}`} icon="bed" color={colors.info} />
-              <SummaryCard label="Total capacity" value={totalCapacity} icon="business" color={colors.success} />
-              <SummaryCard label="Vacant beds" value={availableBeds} icon="log-out-outline" color={colors.amberDark} />
+              <SummaryCard
+                label="Hostel students"
+                value={totalStudents}
+                icon="people"
+                color={colors.ink}
+              />
+              <SummaryCard
+                label="Occupied rooms"
+                value={`${occupiedRooms}/${rooms.length}`}
+                icon="bed"
+                color={colors.info}
+              />
+              <SummaryCard
+                label="Total capacity"
+                value={totalCapacity}
+                icon="business"
+                color={colors.success}
+              />
+              <SummaryCard
+                label="Vacant beds"
+                value={availableBeds}
+                icon="log-out-outline"
+                color={colors.amberDark}
+              />
             </View>
 
             <View style={s.filterRow}>
@@ -568,9 +790,17 @@ export default function HostelScreen() {
                 <Pressable
                   key={wing}
                   onPress={() => setWingFilter(wing)}
-                  style={[s.filterChip, wingFilter === wing && s.filterChipActive]}
+                  style={[
+                    s.filterChip,
+                    wingFilter === wing && s.filterChipActive,
+                  ]}
                 >
-                  <Text style={[s.filterText, wingFilter === wing && s.filterTextActive]}>
+                  <Text
+                    style={[
+                      s.filterText,
+                      wingFilter === wing && s.filterTextActive,
+                    ]}
+                  >
                     {wing === "All" ? "All Wings" : wing}
                   </Text>
                 </Pressable>
@@ -582,14 +812,21 @@ export default function HostelScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Refresh hostel rooms"
               >
-                {refreshing ? <ActivityIndicator size="small" color={colors.ink} /> : <Ionicons name="refresh" size={17} color={colors.ink} />}
+                {refreshing ? (
+                  <ActivityIndicator size="small" color={colors.ink} />
+                ) : (
+                  <Ionicons name="refresh" size={17} color={colors.ink} />
+                )}
               </Pressable>
             </View>
 
             <View style={s.roomsHeading}>
               <View>
                 <Text style={s.sectionTitle}>Hostel Rooms</Text>
-                <Text style={s.sectionSubtitle}>{filteredRooms.length} rooms · {wingFilter === "All" ? "all wings" : `${wingFilter} wing`}</Text>
+                <Text style={s.sectionSubtitle}>
+                  {filteredRooms.length} rooms ·{" "}
+                  {wingFilter === "All" ? "all wings" : `${wingFilter} wing`}
+                </Text>
               </View>
               {canManage && (
                 <Pressable style={s.addRoomSmall} onPress={openRoomForm}>
@@ -602,61 +839,105 @@ export default function HostelScreen() {
             {!filteredRooms.length ? (
               <Card style={s.emptyCard}>
                 <View style={s.emptyIcon}>
-                  <Ionicons name="bed-outline" size={28} color={colors.amberDark} />
+                  <Ionicons
+                    name="bed-outline"
+                    size={28}
+                    color={colors.amberDark}
+                  />
                 </View>
-                <Text style={s.emptyTitle}>{rooms.length ? "No rooms in this wing" : "No hostel rooms yet"}</Text>
+                <Text style={s.emptyTitle}>
+                  {rooms.length
+                    ? "No rooms in this wing"
+                    : "No hostel rooms yet"}
+                </Text>
                 <Text style={s.emptyText}>
-                  {rooms.length ? "Choose another wing to see rooms." : "Add hostel rooms to start managing capacity and student allotments."}
+                  {rooms.length
+                    ? "Choose another wing to see rooms."
+                    : "Add hostel rooms to start managing capacity and student allotments."}
                 </Text>
                 {canManage && !rooms.length && (
-                  <View style={s.emptyButton}><Button title="Add First Room" onPress={openRoomForm} /></View>
+                  <View style={s.emptyButton}>
+                    <Button title="Add First Room" onPress={openRoomForm} />
+                  </View>
                 )}
               </Card>
             ) : (
               filteredRooms.map((targetRoom) => {
-                const vacant = Math.max(0, targetRoom.capacity - targetRoom.occupants.length);
+                const vacant = Math.max(
+                  0,
+                  targetRoom.capacity - targetRoom.occupants.length,
+                );
                 const full = vacant === 0;
                 return (
                   <Card key={targetRoom._id} style={s.roomCard}>
                     <View style={s.roomHeader}>
                       <View style={s.roomIcon}>
-                        <Ionicons name="bed" size={19} color={colors.amberDark} />
+                        <Ionicons
+                          name="bed"
+                          size={19}
+                          color={colors.amberDark}
+                        />
                       </View>
                       <View style={s.roomInfo}>
                         <Text style={s.roomNumber}>{targetRoom.roomNo}</Text>
                         <Text style={s.roomMeta}>
-                          Block {targetRoom.block} · Floor {targetRoom.floor} · {targetRoom.wing}
+                          Block {targetRoom.block} · Floor {targetRoom.floor} ·{" "}
+                          {targetRoom.wing}
                         </Text>
                       </View>
-                      <View style={[s.vacancyBadge, full ? s.fullBadge : s.availableBadge]}>
-                        <Text style={[s.vacancyText, full ? s.fullText : s.availableText]}>
+                      <View
+                        style={[
+                          s.vacancyBadge,
+                          full ? s.fullBadge : s.availableBadge,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            s.vacancyText,
+                            full ? s.fullText : s.availableText,
+                          ]}
+                        >
                           {full ? "Full" : `${vacant} vacant`}
                         </Text>
                       </View>
                     </View>
                     <View style={s.occupantsHeader}>
                       <Text style={s.occupantsTitle}>Occupants</Text>
-                      <Text style={s.occupantsCount}>{targetRoom.occupants.length}/{targetRoom.capacity}</Text>
+                      <Text style={s.occupantsCount}>
+                        {targetRoom.occupants.length}/{targetRoom.capacity}
+                      </Text>
                     </View>
                     {targetRoom.occupants.length === 0 ? (
                       <View style={s.noOccupants}>
-                        <Ionicons name="person-outline" size={16} color={colors.muted} />
+                        <Ionicons
+                          name="person-outline"
+                          size={16}
+                          color={colors.muted}
+                        />
                         <Text style={s.noOccupantsText}>No occupants</Text>
                       </View>
                     ) : (
                       targetRoom.occupants.map((studentId) => (
                         <View key={studentId} style={s.occupantRow}>
                           <View style={s.occupantAvatar}>
-                            <Ionicons name="person" size={14} color={colors.info} />
+                            <Ionicons
+                              name="person"
+                              size={14}
+                              color={colors.info}
+                            />
                           </View>
                           <View style={s.occupantInfo}>
-                            <Text style={s.occupantName}>{occupantNames.get(studentId) || studentId}</Text>
+                            <Text style={s.occupantName}>
+                              {occupantNames.get(studentId) || studentId}
+                            </Text>
                             <Text style={s.occupantId}>ID: {studentId}</Text>
                           </View>
                           {canManage && (
                             <Pressable
                               style={s.moveOutButton}
-                              onPress={() => vacateStudent(targetRoom, studentId)}
+                              onPress={() =>
+                                vacateStudent(targetRoom, studentId)
+                              }
                               disabled={busy}
                             >
                               <Text style={s.moveOutText}>Move out</Text>
@@ -674,7 +955,11 @@ export default function HostelScreen() {
                               openAllotForm(targetRoom._id);
                             }}
                           >
-                            <Ionicons name="person-add-outline" size={15} color={colors.info} />
+                            <Ionicons
+                              name="person-add-outline"
+                              size={15}
+                              color={colors.info}
+                            />
                             <Text style={s.allotButtonText}>Allot student</Text>
                           </Pressable>
                         )}
@@ -685,7 +970,11 @@ export default function HostelScreen() {
                           accessibilityRole="button"
                           accessibilityLabel={`Delete room ${targetRoom.roomNo}`}
                         >
-                          <Ionicons name="trash-outline" size={16} color={colors.alert} />
+                          <Ionicons
+                            name="trash-outline"
+                            size={16}
+                            color={colors.alert}
+                          />
                         </Pressable>
                       </View>
                     )}
@@ -694,40 +983,82 @@ export default function HostelScreen() {
               })
             )}
             {!canManage && (
-              <Text style={s.readOnlyNote}>Read-only access. Contact a hostel administrator to manage rooms and allotments.</Text>
+              <Text style={s.readOnlyNote}>
+                Read-only access. Contact a hostel administrator to manage rooms
+                and allotments.
+              </Text>
             )}
           </>
         )}
       </ScrollView>
 
-      <Modal visible={roomModal} transparent animationType="slide" onRequestClose={() => !busy && setRoomModal(false)}>
-        <KeyboardAvoidingView style={s.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <Modal
+        visible={roomModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !busy && setRoomModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={s.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={s.modalCard}>
             <View style={s.modalHeader}>
               <View>
                 <Text style={s.modalTitle}>Add Hostel Room</Text>
-                <Text style={s.modalSubtitle}>Set room block, floor, wing and bed capacity.</Text>
+                <Text style={s.modalSubtitle}>
+                  Set room block, floor, wing and bed capacity.
+                </Text>
               </View>
-              <Pressable onPress={() => setRoomModal(false)} disabled={busy} hitSlop={10}>
+              <Pressable
+                onPress={() => setRoomModal(false)}
+                disabled={busy}
+                hitSlop={10}
+              >
                 <Ionicons name="close" size={23} color={colors.muted} />
               </Pressable>
             </View>
-            <ScrollView contentContainerStyle={s.formFields} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerStyle={s.formFields}
+              keyboardShouldPersistTaps="handled"
+            >
               <View style={s.formRow}>
                 <View style={s.formColumn}>
                   <Text style={s.fieldLabel}>BLOCK *</Text>
                   <TextInput
                     value={room.block}
-                    onChangeText={(block) => setRoom((current) => ({ ...current, block }))}
+                    onChangeText={(block) =>
+                      setRoom((current) => ({ ...current, block }))
+                    }
                     editable={!busy}
                     placeholder="e.g. A"
                     placeholderTextColor="#98A2B3"
                     style={s.input}
                   />
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.quickOptions}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={s.quickOptions}
+                  >
                     {BLOCKS.map((block) => (
-                      <Pressable key={block} style={[s.quickChip, room.block === block && s.quickChipSelected]} onPress={() => setRoom((current) => ({ ...current, block }))}>
-                        <Text style={[s.quickChipText, room.block === block && s.quickChipTextSelected]}>{block}</Text>
+                      <Pressable
+                        key={block}
+                        style={[
+                          s.quickChip,
+                          room.block === block && s.quickChipSelected,
+                        ]}
+                        onPress={() =>
+                          setRoom((current) => ({ ...current, block }))
+                        }
+                      >
+                        <Text
+                          style={[
+                            s.quickChipText,
+                            room.block === block && s.quickChipTextSelected,
+                          ]}
+                        >
+                          {block}
+                        </Text>
                       </Pressable>
                     ))}
                   </ScrollView>
@@ -736,7 +1067,9 @@ export default function HostelScreen() {
                   <Text style={s.fieldLabel}>FLOOR *</Text>
                   <TextInput
                     value={room.floor}
-                    onChangeText={(floor) => setRoom((current) => ({ ...current, floor }))}
+                    onChangeText={(floor) =>
+                      setRoom((current) => ({ ...current, floor }))
+                    }
                     editable={!busy}
                     placeholder="1"
                     placeholderTextColor="#98A2B3"
@@ -749,17 +1082,25 @@ export default function HostelScreen() {
                 label="WING"
                 value={room.wing}
                 placeholder="Select wing"
-                onPress={() => showPicker({
-                  title: "Select hostel wing",
-                  values: [...WINGS],
-                  onSelect: (value) => setRoom((current) => ({ ...current, wing: value as Wing })),
-                })}
+                onPress={() =>
+                  showPicker({
+                    title: "Select hostel wing",
+                    values: [...WINGS],
+                    onSelect: (value) =>
+                      setRoom((current) => ({
+                        ...current,
+                        wing: value as Wing,
+                      })),
+                  })
+                }
               />
               <View style={s.fieldWrap}>
                 <Text style={s.fieldLabel}>BED CAPACITY *</Text>
                 <TextInput
                   value={room.capacity}
-                  onChangeText={(capacity) => setRoom((current) => ({ ...current, capacity }))}
+                  onChangeText={(capacity) =>
+                    setRoom((current) => ({ ...current, capacity }))
+                  }
                   editable={!busy}
                   placeholder="3"
                   placeholderTextColor="#98A2B3"
@@ -767,67 +1108,122 @@ export default function HostelScreen() {
                   style={s.input}
                 />
               </View>
-              <Text style={s.roomNoHint}>Room number will be generated automatically: {getNextRoomNo(rooms)}</Text>
+              <Text style={s.roomNoHint}>
+                Room number will be generated automatically:{" "}
+                {getNextRoomNo(rooms)}
+              </Text>
             </ScrollView>
             <View style={s.modalActions}>
-              <Pressable style={s.cancelButton} onPress={() => setRoomModal(false)} disabled={busy}>
+              <Pressable
+                style={s.cancelButton}
+                onPress={() => setRoomModal(false)}
+                disabled={busy}
+              >
                 <Text style={s.cancelText}>Cancel</Text>
               </Pressable>
-              <View style={s.modalSubmit}><Button title={busy ? "Adding..." : "Add Room"} onPress={() => void createRoom()} loading={busy} /></View>
+              <View style={s.modalSubmit}>
+                <Button
+                  title={busy ? "Adding..." : "Add Room"}
+                  onPress={() => void createRoom()}
+                  loading={busy}
+                />
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={allotModal} transparent animationType="slide" onRequestClose={() => !busy && setAllotModal(false)}>
-        <KeyboardAvoidingView style={s.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <Modal
+        visible={allotModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !busy && setAllotModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={s.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={s.modalCard}>
             <View style={s.modalHeader}>
               <View>
                 <Text style={s.modalTitle}>Allot Hostel Room</Text>
-                <Text style={s.modalSubtitle}>Select an unallotted student and a room with a vacant bed.</Text>
+                <Text style={s.modalSubtitle}>
+                  Select an unallotted student and a room with a vacant bed.
+                </Text>
               </View>
-              <Pressable onPress={() => setAllotModal(false)} disabled={busy} hitSlop={10}>
+              <Pressable
+                onPress={() => setAllotModal(false)}
+                disabled={busy}
+                hitSlop={10}
+              >
                 <Ionicons name="close" size={23} color={colors.muted} />
               </Pressable>
             </View>
             <View style={s.formFields}>
               <SelectField
                 label="STUDENT *"
-                value={students.find((student) => student.id === selectedStudentId)?.name || ""}
+                value={
+                  students.find((student) => student.id === selectedStudentId)
+                    ?.name || ""
+                }
                 placeholder="Select student"
-                onPress={() => showPicker({
-                  title: "Select student",
-                  values: availableStudents.map((student) => `${student.name} · ${student.admissionNo}`),
-                  onSelect: (value) => {
-                    const admissionNo = value.split(" · ").pop();
-                    const student = availableStudents.find((item) => item.admissionNo === admissionNo);
-                    setSelectedStudentId(student?.id || "");
-                  },
-                })}
+                onPress={() =>
+                  showPicker({
+                    title: "Select student",
+                    values: availableStudents.map(
+                      (student) => `${student.name} · ${student.admissionNo}`,
+                    ),
+                    onSelect: (value) => {
+                      const admissionNo = value.split(" · ").pop();
+                      const student = availableStudents.find(
+                        (item) => item.admissionNo === admissionNo,
+                      );
+                      setSelectedStudentId(student?.id || "");
+                    },
+                  })
+                }
               />
               <SelectField
                 label="AVAILABLE ROOM *"
-                value={rooms.find((item) => item._id === selectedRoomId)
-                  ? `${rooms.find((item) => item._id === selectedRoomId)?.roomNo} · Block ${rooms.find((item) => item._id === selectedRoomId)?.block} · ${rooms.find((item) => item._id === selectedRoomId)?.wing}`
-                  : ""}
+                value={
+                  rooms.find((item) => item._id === selectedRoomId)
+                    ? `${rooms.find((item) => item._id === selectedRoomId)?.roomNo} · Block ${rooms.find((item) => item._id === selectedRoomId)?.block} · ${rooms.find((item) => item._id === selectedRoomId)?.wing}`
+                    : ""
+                }
                 placeholder="Select room"
-                onPress={() => showPicker({
-                  title: "Select available room",
-                  values: availableRooms.map((item) => `${item.roomNo} · Block ${item.block} · ${item.wing} · ${item.capacity - item.occupants.length} vacant`),
-                  onSelect: (value) => {
-                    const roomNo = value.split(" · ")[0];
-                    const selected = availableRooms.find((item) => item.roomNo === roomNo);
-                    setSelectedRoomId(selected?._id || "");
-                  },
-                })}
+                onPress={() =>
+                  showPicker({
+                    title: "Select available room",
+                    values: availableRooms.map(
+                      (item) =>
+                        `${item.roomNo} · Block ${item.block} · ${item.wing} · ${item.capacity - item.occupants.length} vacant`,
+                    ),
+                    onSelect: (value) => {
+                      const roomNo = value.split(" · ")[0];
+                      const selected = availableRooms.find(
+                        (item) => item.roomNo === roomNo,
+                      );
+                      setSelectedRoomId(selected?._id || "");
+                    },
+                  })
+                }
               />
             </View>
             <View style={s.modalActions}>
-              <Pressable style={s.cancelButton} onPress={() => setAllotModal(false)} disabled={busy}>
+              <Pressable
+                style={s.cancelButton}
+                onPress={() => setAllotModal(false)}
+                disabled={busy}
+              >
                 <Text style={s.cancelText}>Cancel</Text>
               </Pressable>
-              <View style={s.modalSubmit}><Button title={busy ? "Allotting..." : "Allot Student"} onPress={() => void allotStudent()} loading={busy} /></View>
+              <View style={s.modalSubmit}>
+                <Button
+                  title={busy ? "Allotting..." : "Allot Student"}
+                  onPress={() => void allotStudent()}
+                  loading={busy}
+                />
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -838,6 +1234,24 @@ export default function HostelScreen() {
         search={pickerSearch}
         onSearch={setPickerSearch}
       />
+    </View>
+  );
+}
+
+function StudentRoomDetail({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={s.studentDetailRow}>
+      <Ionicons name={icon} size={15} color={colors.muted} />
+      <Text style={s.studentDetailLabel}>{label}</Text>
+      <Text style={s.studentDetailValue}>{value}</Text>
     </View>
   );
 }
@@ -867,46 +1281,261 @@ function SummaryCard({
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.paper },
   content: { padding: 16, paddingBottom: 32, gap: 13 },
+  studentContent: { padding: 16, paddingBottom: 32, gap: 14 },
+  studentHero: {
+    padding: 19,
+    borderRadius: 20,
+    backgroundColor: colors.ink,
+    borderBottomWidth: 3,
+    borderBottomColor: colors.amber,
+  },
+  studentHeroIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 13,
+  },
+  studentEyebrow: {
+    color: "#FFD58A",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+  },
+  studentTitle: {
+    color: "#fff",
+    fontSize: 23,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  studentSubtitle: {
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 5,
+  },
+  studentRoomCard: { gap: 14 },
+  studentRoomHeading: { flexDirection: "row", alignItems: "center", gap: 10 },
+  studentRoomIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: "#EAF2F8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  studentRoomCopy: { flex: 1, minWidth: 0, gap: 3 },
+  studentRoomTitle: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  studentRoomSubtitle: { color: colors.muted, fontSize: 10 },
+  allottedBadge: {
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: "#E8F7EF",
+  },
+  allottedText: { color: colors.success, fontSize: 9, fontWeight: "900" },
+  studentDetails: {
+    gap: 11,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 12,
+  },
+  studentDetailRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  studentDetailLabel: { width: 65, color: colors.muted, fontSize: 10 },
+  studentDetailValue: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "right",
+  },
+  studentEmptyCard: {
+    minHeight: 185,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    padding: 22,
+  },
+  studentEmptyTitle: { color: colors.ink, fontSize: 14, fontWeight: "800" },
+  studentSubtitleText: {
+    color: colors.muted,
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  studentNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#EAF2F8",
+  },
+  studentNoteText: {
+    flex: 1,
+    color: colors.muted,
+    fontSize: 10,
+    lineHeight: 15,
+  },
   hero: { padding: 20, borderRadius: 20, backgroundColor: colors.ink },
-  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  heroIcon: { width: 43, height: 43, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  heroIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
   heroActions: { flexDirection: "row", alignItems: "center", gap: 7 },
-  secondaryHeroButton: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.14)", paddingHorizontal: 9, paddingVertical: 8 },
+  secondaryHeroButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+  },
   secondaryHeroText: { color: "#fff", fontSize: 9, fontWeight: "800" },
-  heroButton: { flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 10, backgroundColor: "#fff", paddingHorizontal: 9, paddingVertical: 8 },
+  heroButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+  },
   heroButtonText: { color: colors.ink, fontSize: 9, fontWeight: "800" },
-  eyebrow: { color: "#FFD58A", fontSize: 10, fontWeight: "800", letterSpacing: 1.5 },
+  eyebrow: {
+    color: "#FFD58A",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
   title: { color: "#fff", fontSize: 21, fontWeight: "800", marginTop: 4 },
-  subtitle: { color: "rgba(255,255,255,0.76)", fontSize: 11, lineHeight: 17, marginTop: 5 },
+  subtitle: {
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 5,
+  },
   errorCard: { alignItems: "center", gap: 9 },
-  errorText: { color: colors.alert, fontSize: 11, textAlign: "center", lineHeight: 16 },
+  errorText: {
+    color: colors.alert,
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 16,
+  },
   retryText: { color: colors.info, fontSize: 12, fontWeight: "800" },
-  warningCard: { flexDirection: "row", alignItems: "center", gap: 8, padding: 11 },
+  warningCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 11,
+  },
   warningText: { flex: 1, color: colors.info, fontSize: 10, lineHeight: 15 },
   summaryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  summaryCard: { width: "48%", minHeight: 108, alignItems: "center", justifyContent: "center", padding: 10, gap: 4 },
-  summaryIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  summaryCard: {
+    width: "48%",
+    minHeight: 108,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10,
+    gap: 4,
+  },
+  summaryIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   summaryValue: { color: colors.ink, fontSize: 19, fontWeight: "800" },
   summaryLabel: { color: colors.muted, fontSize: 9, textAlign: "center" },
   filterRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  filterChip: { borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff", paddingHorizontal: 10, paddingVertical: 7 },
+  filterChip: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
   filterChipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   filterText: { color: colors.muted, fontSize: 9, fontWeight: "700" },
   filterTextActive: { color: "#fff" },
-  refreshButton: { width: 34, height: 34, borderRadius: 10, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginLeft: "auto" },
-  roomsHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },
+  refreshButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: "auto",
+  },
+  roomsHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
   sectionSubtitle: { color: colors.muted, fontSize: 10, marginTop: 3 },
-  addRoomSmall: { flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 9, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, paddingHorizontal: 8, paddingVertical: 6 },
+  addRoomSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderRadius: 9,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   addRoomSmallText: { color: colors.ink, fontSize: 9, fontWeight: "800" },
   emptyCard: { alignItems: "center", gap: 9, padding: 20 },
-  emptyIcon: { width: 51, height: 51, borderRadius: 16, backgroundColor: "#FFF4DF", alignItems: "center", justifyContent: "center" },
-  emptyTitle: { color: colors.ink, fontSize: 13, fontWeight: "800", textAlign: "center" },
-  emptyText: { color: colors.muted, fontSize: 10, textAlign: "center", lineHeight: 15 },
+  emptyIcon: {
+    width: 51,
+    height: 51,
+    borderRadius: 16,
+    backgroundColor: "#FFF4DF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  emptyText: {
+    color: colors.muted,
+    fontSize: 10,
+    textAlign: "center",
+    lineHeight: 15,
+  },
   emptyButton: { width: "100%", marginTop: 3 },
   roomCard: { gap: 11, padding: 13 },
   roomHeader: { flexDirection: "row", alignItems: "center", gap: 9 },
-  roomIcon: { width: 39, height: 39, borderRadius: 12, backgroundColor: "#FFF4DF", alignItems: "center", justifyContent: "center" },
+  roomIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 12,
+    backgroundColor: "#FFF4DF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   roomInfo: { flex: 1 },
   roomNumber: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   roomMeta: { color: colors.muted, fontSize: 9, marginTop: 3 },
@@ -916,51 +1545,209 @@ const s = StyleSheet.create({
   vacancyText: { fontSize: 8, fontWeight: "800" },
   fullText: { color: colors.alert },
   availableText: { color: "#15966A" },
-  occupantsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  occupantsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   occupantsTitle: { color: colors.ink, fontSize: 10, fontWeight: "800" },
   occupantsCount: { color: colors.muted, fontSize: 9, fontWeight: "700" },
-  noOccupants: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: colors.paper, borderRadius: 9, paddingVertical: 12 },
+  noOccupants: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: colors.paper,
+    borderRadius: 9,
+    paddingVertical: 12,
+  },
   noOccupantsText: { color: colors.muted, fontSize: 10 },
-  occupantRow: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.paper, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 8 },
-  occupantAvatar: { width: 29, height: 29, borderRadius: 10, backgroundColor: "#EAF2FF", alignItems: "center", justifyContent: "center" },
+  occupantRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.paper,
+    borderRadius: 9,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+  },
+  occupantAvatar: {
+    width: 29,
+    height: 29,
+    borderRadius: 10,
+    backgroundColor: "#EAF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   occupantInfo: { flex: 1 },
   occupantName: { color: colors.ink, fontSize: 10, fontWeight: "700" },
   occupantId: { color: colors.muted, fontSize: 8, marginTop: 2 },
   moveOutButton: { paddingHorizontal: 7, paddingVertical: 6 },
   moveOutText: { color: colors.alert, fontSize: 9, fontWeight: "800" },
-  roomActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingTop: 8 },
-  allotButton: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 6 },
+  roomActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingTop: 8,
+  },
+  allotButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   allotButtonText: { color: colors.info, fontSize: 9, fontWeight: "800" },
-  deleteButton: { width: 33, height: 31, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF8F7" },
-  readOnlyNote: { color: colors.muted, fontSize: 10, textAlign: "center", lineHeight: 15, paddingHorizontal: 12 },
-  modalBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(12,20,35,0.45)" },
-  modalCard: { maxHeight: "88%", backgroundColor: colors.card, borderTopLeftRadius: 23, borderTopRightRadius: 23, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 25 },
-  modalHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  deleteButton: {
+    width: 33,
+    height: 31,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF8F7",
+  },
+  readOnlyNote: {
+    color: colors.muted,
+    fontSize: 10,
+    textAlign: "center",
+    lineHeight: 15,
+    paddingHorizontal: 12,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(12,20,35,0.45)",
+  },
+  modalCard: {
+    maxHeight: "88%",
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 23,
+    borderTopRightRadius: 23,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 25,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
   modalTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
-  modalSubtitle: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 4 },
+  modalSubtitle: {
+    color: colors.muted,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 4,
+  },
   formFields: { gap: 15, paddingVertical: 16 },
   formRow: { flexDirection: "row", gap: 10 },
   formColumn: { flex: 1, gap: 7 },
   fieldWrap: { gap: 6 },
-  fieldLabel: { color: colors.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
-  input: { minHeight: 44, borderWidth: 1, borderColor: colors.border, borderRadius: 11, backgroundColor: "#fff", paddingHorizontal: 12, color: colors.ink, fontSize: 12 },
+  fieldLabel: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  input: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 11,
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    color: colors.ink,
+    fontSize: 12,
+  },
   quickOptions: { gap: 5 },
-  quickChip: { minWidth: 26, alignItems: "center", borderRadius: 7, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 8, paddingVertical: 5 },
+  quickChip: {
+    minWidth: 26,
+    alignItems: "center",
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
   quickChipSelected: { borderColor: colors.ink, backgroundColor: colors.ink },
   quickChipText: { color: colors.muted, fontSize: 9, fontWeight: "700" },
   quickChipTextSelected: { color: "#fff" },
-  selectField: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: colors.border, borderRadius: 11, backgroundColor: "#fff", paddingHorizontal: 12 },
+  selectField: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 11,
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+  },
   selectValue: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   placeholder: { color: "#98A2B3", fontWeight: "400" },
   roomNoHint: { color: colors.muted, fontSize: 10, lineHeight: 15 },
-  modalActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingTop: 12 },
-  cancelButton: { minHeight: 42, justifyContent: "center", paddingHorizontal: 10 },
+  modalActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingTop: 12,
+  },
+  cancelButton: {
+    minHeight: 42,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
   cancelText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
   modalSubmit: { minWidth: 125 },
-  pickerCard: { maxHeight: "78%", backgroundColor: colors.card, borderTopLeftRadius: 23, borderTopRightRadius: 23, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 25 },
-  pickerSearch: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: "#fff", paddingHorizontal: 10, marginVertical: 12 },
-  pickerSearchInput: { flex: 1, color: colors.ink, fontSize: 11, paddingVertical: 8 },
-  pickerRow: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  pickerCard: {
+    maxHeight: "78%",
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 23,
+    borderTopRightRadius: 23,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 25,
+  },
+  pickerSearch: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+    marginVertical: 12,
+  },
+  pickerSearchInput: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 11,
+    paddingVertical: 8,
+  },
+  pickerRow: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
   pickerText: { color: colors.ink, fontSize: 11, fontWeight: "600" },
-  pickerEmpty: { color: colors.muted, fontSize: 11, textAlign: "center", paddingVertical: 18 },
+  pickerEmpty: {
+    color: colors.muted,
+    fontSize: 11,
+    textAlign: "center",
+    paddingVertical: 18,
+  },
 });

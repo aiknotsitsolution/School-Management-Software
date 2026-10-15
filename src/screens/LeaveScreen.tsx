@@ -55,14 +55,12 @@ const dateInputValue = (date: Date) => {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
-const emptyForm = (): LeaveForm => {
+const emptyForm = (isStudent = false): LeaveForm => {
   const fromDate = dateInputValue(new Date());
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
   return {
-    leaveType: "Casual",
+    leaveType: isStudent ? "Sick" : "Casual",
     fromDate,
-    toDate: dateInputValue(tomorrow),
+    toDate: fromDate,
     reason: "",
   };
 };
@@ -103,13 +101,11 @@ const statusColor = (status: string) => {
 
 export default function LeaveScreen() {
   const { user, can } = useAuth();
+  const isStudent = user?.role === "student";
   const canApply = can("leaves:apply");
   const canApprove = can("leaves:approve");
-  const canSeeBalance = ["teacher", "staff", "student"].includes(
-    user?.role || "",
-  );
-  const leaveTypes =
-    user?.role === "student" ? STUDENT_LEAVE_TYPES : LEAVE_TYPES;
+  const canSeeBalance = ["teacher", "staff"].includes(user?.role || "");
+  const leaveTypes = isStudent ? STUDENT_LEAVE_TYPES : LEAVE_TYPES;
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [staffNames, setStaffNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -122,7 +118,7 @@ export default function LeaveScreen() {
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
-  const [form, setForm] = useState<LeaveForm>(emptyForm);
+  const [form, setForm] = useState<LeaveForm>(() => emptyForm(isStudent));
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState("");
 
@@ -213,16 +209,15 @@ export default function LeaveScreen() {
       approved: requests.filter((item) => item.status === "Approved").length,
       days: requests
         .filter((item) => item.status === "Approved")
-        .reduce(
-          (sum, item) =>
-            sum + countDays(item.fromDate, item.toDate),
-          0,
-        ),
+        .reduce((sum, item) => sum + countDays(item.fromDate, item.toDate), 0),
     }),
     [requests],
   );
 
-  const changeStatus = (item: LeaveRequest, status: "Approved" | "Rejected") => {
+  const changeStatus = (
+    item: LeaveRequest,
+    status: "Approved" | "Rejected",
+  ) => {
     const action = async () => {
       setUpdatingId(item._id);
       try {
@@ -273,7 +268,7 @@ export default function LeaveScreen() {
         reason: form.reason.trim(),
       });
       setModalVisible(false);
-      setForm(emptyForm());
+      setForm(emptyForm(isStudent));
       await loadRequests(true);
       Alert.alert("Request submitted", "Your leave request was submitted.");
     } catch (submitError) {
@@ -315,19 +310,22 @@ export default function LeaveScreen() {
             <Ionicons name="airplane" size={23} color={colors.amberDark} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.eyebrow}>HUMAN RESOURCES</Text>
-            <Text style={s.title}>Leave Management</Text>
+            <Text style={s.eyebrow}>
+              {isStudent ? "SCHOOL SERVICES" : "HUMAN RESOURCES"}
+            </Text>
+            <Text style={s.title}>
+              {isStudent ? "Leave Request" : "Leave Management"}
+            </Text>
             <Text style={s.subtitle}>
-              Apply for leave and track request status.
+              {isStudent
+                ? "Apply for leave and track your requests."
+                : "Apply for leave and track request status."}
             </Text>
           </View>
         </View>
 
         {canApply && (
-          <Button
-            title="Apply Leave"
-            onPress={() => setModalVisible(true)}
-          />
+          <Button title="Apply Leave" onPress={() => setModalVisible(true)} />
         )}
 
         <View style={s.stats}>
@@ -360,7 +358,9 @@ export default function LeaveScreen() {
 
         {tab === "requests" ? (
           <Card style={{ gap: 12 }}>
-            <Text style={s.sectionTitle}>Leave Requests</Text>
+            <Text style={s.sectionTitle}>
+              {isStudent ? "My Leave Requests" : "Leave Requests"}
+            </Text>
             {canApprove && (
               <Text style={s.helper}>
                 Review pending requests and approve or reject them.
@@ -382,10 +382,7 @@ export default function LeaveScreen() {
                 <Pressable
                   key={filter}
                   onPress={() => setStatusFilter(filter)}
-                  style={[
-                    s.filter,
-                    statusFilter === filter && s.activeFilter,
-                  ]}
+                  style={[s.filter, statusFilter === filter && s.activeFilter]}
                 >
                   <Text
                     style={[
@@ -512,8 +509,7 @@ export default function LeaveScreen() {
                     <Text
                       style={[
                         s.typeOptionText,
-                        form.leaveType === item.value &&
-                          s.typeOptionTextActive,
+                        form.leaveType === item.value && s.typeOptionTextActive,
                       ]}
                     >
                       {item.label}
@@ -814,7 +810,12 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   requestHeading: { flexDirection: "row", alignItems: "center", gap: 5 },
-  applicant: { flexShrink: 1, color: colors.ink, fontSize: 13, fontWeight: "800" },
+  applicant: {
+    flexShrink: 1,
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "800",
+  },
   badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10 },
   badgeText: { fontSize: 9, fontWeight: "800" },
   requestDates: { color: colors.muted, fontSize: 11 },

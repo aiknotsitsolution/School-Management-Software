@@ -67,7 +67,9 @@ export default function MoreScreen() {
                       color={colors.amberDark}
                     />
                   </View>
-                  <Text style={s.label}>Alerts</Text>
+                  <Text style={s.label}>
+                    {isStudent ? "Notifications" : "Alerts"}
+                  </Text>
                 </Pressable>
               )}
               {can("staff:read") && (
@@ -97,6 +99,36 @@ export default function MoreScreen() {
                   <Text style={s.label}>Fees Collection</Text>
                 </Pressable>
               )}
+              {isStudent && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("StudentFees")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="wallet-outline"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>My Fees</Text>
+                </Pressable>
+              )}
+              {isStudent && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("OnlinePayment")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="card-outline"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Pay Online</Text>
+                </Pressable>
+              )}
               {can("transport:read") && (
                 <Pressable
                   style={s.tile}
@@ -105,7 +137,9 @@ export default function MoreScreen() {
                   <View style={s.icon}>
                     <Ionicons name="map" size={22} color={colors.amberDark} />
                   </View>
-                  <Text style={s.label}>Bus Tracking</Text>
+                  <Text style={s.label}>
+                    {isStudent ? "My School Bus" : "Bus Tracking"}
+                  </Text>
                 </Pressable>
               )}
               {(can("students:read") || user?.role === "student") && (
@@ -121,6 +155,21 @@ export default function MoreScreen() {
                     />
                   </View>
                   <Text style={s.label}>ID Card</Text>
+                </Pressable>
+              )}
+              {isStudent && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("StudentDocuments")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="folder-open"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>My Documents</Text>
                 </Pressable>
               )}
               {can("timetable:read") && (
@@ -148,7 +197,7 @@ export default function MoreScreen() {
                   </View>
                   <Text style={s.label}>Exams</Text>
                 </Pressable>
-              ) : (can("exams:read") || can("exams:write")) ? (
+              ) : can("exams:read") || can("exams:write") ? (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("Examination")}
@@ -229,11 +278,7 @@ export default function MoreScreen() {
                   onPress={() => nav.navigate("Rollover")}
                 >
                   <View style={s.icon}>
-                    <Ionicons
-                      name="sync"
-                      size={22}
-                      color={colors.amberDark}
-                    />
+                    <Ionicons name="sync" size={22} color={colors.amberDark} />
                   </View>
                   <Text style={s.label}>Academic Rollover</Text>
                 </Pressable>
@@ -244,11 +289,7 @@ export default function MoreScreen() {
                   onPress={() => nav.navigate("Inventory")}
                 >
                   <View style={s.icon}>
-                    <Ionicons
-                      name="cube"
-                      size={22}
-                      color={colors.amberDark}
-                    />
+                    <Ionicons name="cube" size={22} color={colors.amberDark} />
                   </View>
                   <Text style={s.label}>Inventory</Text>
                 </Pressable>
@@ -259,13 +300,11 @@ export default function MoreScreen() {
                   onPress={() => nav.navigate("Hostel")}
                 >
                   <View style={s.icon}>
-                    <Ionicons
-                      name="bed"
-                      size={22}
-                      color={colors.amberDark}
-                    />
+                    <Ionicons name="bed" size={22} color={colors.amberDark} />
                   </View>
-                  <Text style={s.label}>Hostel</Text>
+                  <Text style={s.label}>
+                    {isStudent ? "My Hostel" : "Hostel"}
+                  </Text>
                 </Pressable>
               )}
               {(can("marks:read") || isStudent) && (
@@ -282,7 +321,9 @@ export default function MoreScreen() {
                       color={colors.amberDark}
                     />
                   </View>
-                  <Text style={s.label}>{isStudent ? "Results" : "Report Card"}</Text>
+                  <Text style={s.label}>
+                    {isStudent ? "Results" : "Report Card"}
+                  </Text>
                 </Pressable>
               )}
               {isStudent && (
@@ -300,6 +341,21 @@ export default function MoreScreen() {
                   <Text style={s.label}>Achievements</Text>
                 </Pressable>
               )}
+              {isStudent && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("MessageBoard")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="chatbubbles"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Messages</Text>
+                </Pressable>
+              )}
               {(can("homework:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
@@ -315,22 +371,18 @@ export default function MoreScreen() {
                   <Text style={s.label}>Homework</Text>
                 </Pressable>
               )}
-              {can("homework:read") && (
+              {(can("homework:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("Syllabus")}
                 >
                   <View style={s.icon}>
-                    <Ionicons
-                      name="book"
-                      size={22}
-                      color={colors.amberDark}
-                    />
+                    <Ionicons name="book" size={22} color={colors.amberDark} />
                   </View>
                   <Text style={s.label}>Syllabus</Text>
                 </Pressable>
               )}
-              {can("library:read") && (
+              {(can("library:read") || isStudent) && (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("Library")}
@@ -387,7 +439,9 @@ export default function MoreScreen() {
                       color={colors.amberDark}
                     />
                   </View>
-                  <Text style={s.label}>Notice Board</Text>
+                  <Text style={s.label}>
+                    {isStudent ? "Notices" : "Notice Board"}
+                  </Text>
                 </Pressable>
               )}
               {can("attendance:mark") && (
@@ -436,10 +490,7 @@ export default function MoreScreen() {
                 </Pressable>
               )}
               {can("leaves:apply") && (
-                <Pressable
-                  style={s.tile}
-                  onPress={() => nav.navigate("Leave")}
-                >
+                <Pressable style={s.tile} onPress={() => nav.navigate("Leave")}>
                   <View style={s.icon}>
                     <Ionicons
                       name="airplane"
@@ -447,7 +498,9 @@ export default function MoreScreen() {
                       color={colors.amberDark}
                     />
                   </View>
-                  <Text style={s.label}>Leave Management</Text>
+                  <Text style={s.label}>
+                    {isStudent ? "Leave Request" : "Leave Management"}
+                  </Text>
                 </Pressable>
               )}
               {can("notices:publish") && (
@@ -514,10 +567,7 @@ export default function MoreScreen() {
               </Pressable>
             )}
             {can("events:read") && (
-              <Pressable
-                style={s.tile}
-                onPress={() => nav.navigate("Events")}
-              >
+              <Pressable style={s.tile} onPress={() => nav.navigate("Events")}>
                 <View style={s.icon}>
                   <Ionicons
                     name="calendar"
@@ -615,6 +665,7 @@ export default function MoreScreen() {
               i.key !== "exams" &&
               i.key !== "inventory" &&
               i.key !== "hostel" &&
+              !(isStudent && i.key === "orders") &&
               (!i.perm || can(i.perm)),
         );
         if (!items.length) return null;

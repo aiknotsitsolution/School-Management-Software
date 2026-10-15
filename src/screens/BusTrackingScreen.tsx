@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   ActivityIndicator,
@@ -92,7 +98,8 @@ function formatPing(value?: string) {
 }
 
 export default function BusTrackingScreen() {
-  const { school, can } = useAuth();
+  const { school, can, user } = useAuth();
+  const isStudent = user?.role === "student";
   const canSync = can("transport:update");
   const [routes, setRoutes] = useState<TransportRoute[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,37 +120,47 @@ export default function BusTrackingScreen() {
   );
   const initialCenter = schoolLocation || DEFAULT_CENTER;
 
-  const load = useCallback(async (isRefresh = false, silent = false) => {
-    if (isRefresh && !silent) setRefreshing(true);
-    if (!silent) setError("");
-    try {
-      const response = await api.transport.list();
-      setRoutes(response.data || []);
-      setSelectedId((current) => {
-        const stillExists = response.data?.some(
-          (route) => (route._id || route.routeNo) === current,
-        );
-        return stillExists
-          ? current
-          : response.data?.[0]?._id || response.data?.[0]?.routeNo || null;
-      });
-    } catch (err) {
-      if (!silent) {
-        setError(err instanceof Error ? err.message : "Could not load bus routes.");
+  const load = useCallback(
+    async (isRefresh = false, silent = false) => {
+      if (isRefresh && !silent) setRefreshing(true);
+      if (!silent) setError("");
+      try {
+        const response = isStudent
+          ? await api.transport.mine()
+          : await api.transport.list();
+        setRoutes(response.data || []);
+        setSelectedId((current) => {
+          const stillExists = response.data?.some(
+            (route) => (route._id || route.routeNo) === current,
+          );
+          return stillExists
+            ? current
+            : response.data?.[0]?._id || response.data?.[0]?.routeNo || null;
+        });
+      } catch (err) {
+        if (!silent) {
+          setError(
+            err instanceof Error ? err.message : "Could not load bus routes.",
+          );
+        }
+      } finally {
+        setLoading(false);
+        if (!silent) setRefreshing(false);
       }
-    } finally {
-      setLoading(false);
-      if (!silent) setRefreshing(false);
-    }
-  }, []);
+    },
+    [isStudent],
+  );
 
   useEffect(() => {
     void load();
     let active = AppState.currentState === "active";
-    const appStateSubscription = AppState.addEventListener("change", (state) => {
-      active = state === "active";
-      if (active) void load(true, true);
-    });
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (state) => {
+        active = state === "active";
+        if (active) void load(true, true);
+      },
+    );
     const timer = setInterval(() => {
       if (active) void load(true, true);
     }, REFRESH_INTERVAL_MS);
@@ -154,8 +171,10 @@ export default function BusTrackingScreen() {
   }, [load]);
 
   useEffect(() => {
+    if (isStudent) return undefined;
     let cancelled = false;
-    void api.transport.trackingStatus()
+    void api.transport
+      .trackingStatus()
       .then((response) => {
         if (!cancelled) setProviders(response.data?.providers || null);
       })
@@ -165,7 +184,7 @@ export default function BusTrackingScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isStudent]);
 
   const buses = useMemo(
     () =>
@@ -176,8 +195,11 @@ export default function BusTrackingScreen() {
           position: routePosition(route),
         }))
         .filter(
-          (bus): bus is typeof bus & { position: NonNullable<typeof bus.position> } =>
-            bus.position !== null,
+          (
+            bus,
+          ): bus is typeof bus & {
+            position: NonNullable<typeof bus.position>;
+          } => bus.position !== null,
         ),
     [routes],
   );
@@ -211,8 +233,14 @@ export default function BusTrackingScreen() {
     ? providers.traccar.enabled && providers.traccar.configured
       ? { label: "GPS provider connected", tone: styles.providerReady }
       : providers.traccar.enabled
-        ? { label: "Provider enabled, not configured · manual positions only", tone: styles.providerWarning }
-        : { label: "No GPS provider configured · manual positions only", tone: styles.providerNeutral }
+        ? {
+            label: "Provider enabled, not configured · manual positions only",
+            tone: styles.providerWarning,
+          }
+        : {
+            label: "No GPS provider configured · manual positions only",
+            tone: styles.providerNeutral,
+          }
     : null;
   const selectedPosition = selectedRoute ? routePosition(selectedRoute) : null;
   const stopsForMap = selectedRoute?.stops || [];
@@ -242,7 +270,9 @@ export default function BusTrackingScreen() {
     } catch (err) {
       Alert.alert(
         "Could not sync GPS",
-        err instanceof Error ? err.message : "Could not sync with the GPS provider.",
+        err instanceof Error
+          ? err.message
+          : "Could not sync with the GPS provider.",
       );
     } finally {
       setSyncing(false);
@@ -253,8 +283,48 @@ export default function BusTrackingScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.amberDark} size="large" />
-        <Text style={styles.muted}>Loading bus routes…</Text>
+        <Text style={styles.muted}>
+          {isStudent ? "Loading your bus details…" : "Loading bus routes…"}
+        </Text>
       </View>
+    );
+  }
+
+  if (isStudent && routes.length === 0 && !error) {
+    return (
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void load(true)}
+            tintColor={colors.amberDark}
+          />
+        }
+      >
+        <View style={styles.header}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.eyebrow}>SCHOOL BUS</Text>
+            <Text style={styles.title}>My School Bus</Text>
+            <Text style={styles.subtitle}>The bus route assigned to you.</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void load(true)}
+            style={styles.refreshButton}
+          >
+            <Text style={styles.refreshText}>Refresh</Text>
+          </Pressable>
+        </View>
+        <View style={styles.emptyCard}>
+          <Ionicons name="bus-outline" size={38} color={colors.muted} />
+          <Text style={styles.emptyTitle}>No transport route assigned</Text>
+          <Text style={styles.muted}>
+            If you use school transport, contact the transport department.
+          </Text>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -272,19 +342,30 @@ export default function BusTrackingScreen() {
     >
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>TRANSPORT</Text>
-          <Text style={styles.title}>Bus Tracking</Text>
+          <Text style={styles.eyebrow}>
+            {isStudent ? "SCHOOL BUS" : "TRANSPORT"}
+          </Text>
+          <Text style={styles.title}>
+            {isStudent ? "My School Bus" : "Bus Tracking"}
+          </Text>
           <Text style={styles.subtitle}>
-            Route, vehicle, driver and latest available GPS information.
+            {isStudent
+              ? "Your assigned route, live position and pickup details."
+              : "Route, vehicle, driver and latest available GPS information."}
           </Text>
         </View>
         <Pressable
           accessibilityRole="button"
           onPress={() => void load(true)}
           disabled={refreshing}
-          style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.refreshButton,
+            pressed && styles.pressed,
+          ]}
         >
-          <Text style={styles.refreshText}>{refreshing ? "Loading…" : "Refresh"}</Text>
+          <Text style={styles.refreshText}>
+            {refreshing ? "Loading…" : "Refresh"}
+          </Text>
         </Pressable>
       </View>
 
@@ -297,27 +378,94 @@ export default function BusTrackingScreen() {
         </View>
       ) : null}
 
-      {providerState ? (
+      {!isStudent && providerState ? (
         <View style={[styles.providerBanner, providerState.tone]}>
           <Ionicons
-            name={providerState.tone === styles.providerReady ? "checkmark-circle" : "information-circle"}
+            name={
+              providerState.tone === styles.providerReady
+                ? "checkmark-circle"
+                : "information-circle"
+            }
             size={16}
-            color={providerState.tone === styles.providerReady ? "#287347" : colors.muted}
+            color={
+              providerState.tone === styles.providerReady
+                ? "#287347"
+                : colors.muted
+            }
           />
           <Text style={styles.providerText}>{providerState.label}</Text>
         </View>
       ) : null}
 
       <View style={styles.stats}>
-        <MetricCard value={`${liveCount} / ${routes.length}`} label="Routes with GPS" icon="bus" />
-        <MetricCard value={String(studentCount)} label="Students assigned" icon="people" />
-        <MetricCard value={String(liveCount)} label="Reporting GPS" icon="navigate" />
-        <MetricCard value={timeAgo(newestPing)} label="Last ping" icon="time" />
+        {isStudent ? (
+          <>
+            <MetricCard
+              value={selectedRoute?.routeNo || "—"}
+              label="Route"
+              icon="bus"
+            />
+            <MetricCard
+              value={
+                selectedPosition
+                  ? selectedRoute?.live?.stale
+                    ? "Last known"
+                    : "On the way"
+                  : "No signal"
+              }
+              label="Bus status"
+              icon="navigate"
+            />
+            <MetricCard
+              value={
+                selectedRoute?.live?.etaMinutes != null
+                  ? `${selectedRoute.live.etaMinutes} min`
+                  : "—"
+              }
+              label="ETA to next stop"
+              icon="time"
+            />
+            <MetricCard
+              value={
+                selectedRoute?.live?.stopsRemaining != null
+                  ? String(selectedRoute.live.stopsRemaining)
+                  : "—"
+              }
+              label="Stops left"
+              icon="location"
+            />
+          </>
+        ) : (
+          <>
+            <MetricCard
+              value={`${liveCount} / ${routes.length}`}
+              label="Routes with GPS"
+              icon="bus"
+            />
+            <MetricCard
+              value={String(studentCount)}
+              label="Students assigned"
+              icon="people"
+            />
+            <MetricCard
+              value={String(liveCount)}
+              label="Reporting GPS"
+              icon="navigate"
+            />
+            <MetricCard
+              value={timeAgo(newestPing)}
+              label="Last ping"
+              icon="time"
+            />
+          </>
+        )}
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeading}>
-          <Text style={styles.sectionTitle}>Live fleet map</Text>
+          <Text style={styles.sectionTitle}>
+            {isStudent ? "Your bus location" : "Live fleet map"}
+          </Text>
           <Text style={styles.liveCount}>{liveCount} reporting</Text>
         </View>
         <View style={styles.mapFrame}>
@@ -332,7 +480,11 @@ export default function BusTrackingScreen() {
             }}
           >
             {schoolLocation ? (
-              <Marker coordinate={schoolLocation} title={school?.name || "School"} pinColor={colors.ink} />
+              <Marker
+                coordinate={schoolLocation}
+                title={school?.name || "School"}
+                pinColor={colors.ink}
+              />
             ) : null}
             {buses.map(({ route, id, position }) => (
               <Marker
@@ -353,7 +505,9 @@ export default function BusTrackingScreen() {
                   key={`${selectedId}-stop-${index}`}
                   coordinate={stopCoordinate}
                   title={stopName(stop)}
-                  description={stop.time ? `Scheduled ${stop.time}` : `Stop ${index + 1}`}
+                  description={
+                    stop.time ? `Scheduled ${stop.time}` : `Stop ${index + 1}`
+                  }
                   pinColor="#16213E"
                 />
               );
@@ -368,7 +522,9 @@ export default function BusTrackingScreen() {
           ) : null}
         </View>
         <Text style={styles.mapCaption}>
-          Bus markers show last reported positions. Tap a bus marker or route card to select a route.
+          {isStudent
+            ? "Bus markers show the last reported position of your assigned bus."
+            : "Bus markers show last reported positions. Tap a bus marker or route card to select a route."}
         </Text>
       </View>
 
@@ -379,44 +535,78 @@ export default function BusTrackingScreen() {
               <Ionicons name="bus" size={20} color={colors.amberDark} />
             </View>
             <View style={styles.detailTitleWrap}>
-              <Text style={styles.sectionTitle}>Route {routeName(selectedRoute)}</Text>
+              <Text style={styles.sectionTitle}>
+                Route {routeName(selectedRoute)}
+              </Text>
               <Text style={styles.detailSubtitle}>
                 {selectedRoute.vehicleNo || "Vehicle not assigned"}
               </Text>
             </View>
             {selectedRoute.currentLocation ? (
-              <View style={[
-                styles.gpsBadge,
-                selectedRoute.live?.stale ? styles.gpsStale : styles.gpsLive,
-              ]}>
-                <Text style={[
-                  styles.gpsBadgeText,
-                  selectedRoute.live?.stale ? styles.gpsStaleText : styles.gpsLiveText,
-                ]}>
+              <View
+                style={[
+                  styles.gpsBadge,
+                  selectedRoute.live?.stale ? styles.gpsStale : styles.gpsLive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.gpsBadgeText,
+                    selectedRoute.live?.stale
+                      ? styles.gpsStaleText
+                      : styles.gpsLiveText,
+                  ]}
+                >
                   {selectedRoute.live?.stale ? "Stale GPS" : "Live GPS"}
                 </Text>
               </View>
             ) : (
               <View style={[styles.gpsBadge, styles.gpsStale]}>
-                <Text style={[styles.gpsBadgeText, styles.gpsStaleText]}>No GPS</Text>
+                <Text style={[styles.gpsBadgeText, styles.gpsStaleText]}>
+                  No GPS
+                </Text>
               </View>
             )}
           </View>
           <View style={styles.routeMetrics}>
-            <SmallMetric label="Students" value={String(selectedRoute.assignedStudents?.length || 0)} icon="people-outline" />
-            <SmallMetric label="Stops" value={String(selectedRoute.stops?.length || 0)} icon="location-outline" />
-            <SmallMetric label="Vehicle" value={selectedRoute.vehicleNo || "—"} icon="bus-outline" />
+            {!isStudent && (
+              <SmallMetric
+                label="Students"
+                value={String(selectedRoute.assignedStudents?.length || 0)}
+                icon="people-outline"
+              />
+            )}
+            <SmallMetric
+              label="Stops"
+              value={String(selectedRoute.stops?.length || 0)}
+              icon="location-outline"
+            />
+            <SmallMetric
+              label="Vehicle"
+              value={selectedRoute.vehicleNo || "—"}
+              icon="bus-outline"
+            />
           </View>
           <View style={styles.routeInfoBox}>
-            <InfoRow icon="person-outline" label="Driver" value={selectedRoute.driverName || "Not assigned"} />
+            <InfoRow
+              icon="person-outline"
+              label="Driver"
+              value={selectedRoute.driverName || "Not assigned"}
+            />
             {selectedRoute.driverContact ? (
               <Pressable
                 style={styles.driverCall}
                 onPress={() => {
-                  const phone = selectedRoute.driverContact?.replace(/[^\d+]/g, "");
+                  const phone = selectedRoute.driverContact?.replace(
+                    /[^\d+]/g,
+                    "",
+                  );
                   if (phone) {
                     void Linking.openURL(`tel:${phone}`).catch(() =>
-                      Alert.alert("Unable to call", "This device cannot open the phone dialer."),
+                      Alert.alert(
+                        "Unable to call",
+                        "This device cannot open the phone dialer.",
+                      ),
                     );
                   }
                 }}
@@ -424,7 +614,9 @@ export default function BusTrackingScreen() {
                 accessibilityLabel={`Call driver ${selectedRoute.driverName || ""}`}
               >
                 <Ionicons name="call" size={14} color="#287347" />
-                <Text style={styles.driverCallText}>{selectedRoute.driverContact}</Text>
+                <Text style={styles.driverCallText}>
+                  {selectedRoute.driverContact}
+                </Text>
               </Pressable>
             ) : null}
             <InfoRow
@@ -435,26 +627,40 @@ export default function BusTrackingScreen() {
             <View style={styles.progressMetrics}>
               <SmallMetric
                 label="Distance"
-                value={selectedRoute.live?.distanceKm != null ? `${selectedRoute.live.distanceKm} km` : "—"}
+                value={
+                  selectedRoute.live?.distanceKm != null
+                    ? `${selectedRoute.live.distanceKm} km`
+                    : "—"
+                }
                 icon="navigate-outline"
               />
               <SmallMetric
                 label="ETA"
-                value={selectedRoute.live?.etaMinutes != null ? `${selectedRoute.live.etaMinutes} min` : "—"}
+                value={
+                  selectedRoute.live?.etaMinutes != null
+                    ? `${selectedRoute.live.etaMinutes} min`
+                    : "—"
+                }
                 icon="time-outline"
               />
               <SmallMetric
                 label="Stops left"
-                value={selectedRoute.live?.stopsRemaining != null ? String(selectedRoute.live.stopsRemaining) : "—"}
+                value={
+                  selectedRoute.live?.stopsRemaining != null
+                    ? String(selectedRoute.live.stopsRemaining)
+                    : "—"
+                }
                 icon="git-branch-outline"
               />
             </View>
             <InfoRow
               icon="map-outline"
               label="Coordinates"
-              value={selectedPosition
-                ? `${selectedPosition.latitude.toFixed(5)}, ${selectedPosition.longitude.toFixed(5)}`
-                : "No GPS fix"}
+              value={
+                selectedPosition
+                  ? `${selectedPosition.latitude.toFixed(5)}, ${selectedPosition.longitude.toFixed(5)}`
+                  : "No GPS fix"
+              }
             />
             <InfoRow
               icon="time-outline"
@@ -464,13 +670,19 @@ export default function BusTrackingScreen() {
             <InfoRow
               icon="speedometer-outline"
               label="Position source"
-              value={`${selectedRoute.currentLocation?.source === "traccar"
-                ? `GPS device${selectedRoute.tracking?.deviceName ? ` · ${selectedRoute.tracking.deviceName}` : ""}`
-                : selectedRoute.currentLocation?.source === "manual"
-                  ? "Entered manually by an operator"
-                  : "Source unknown"}${(selectedRoute.live?.speedKmh ?? selectedRoute.currentLocation?.speedKmh ?? 0) > 0
-                    ? ` · ${selectedRoute.live?.speedKmh ?? selectedRoute.currentLocation?.speedKmh} km/h`
-                    : ""}`}
+              value={`${
+                selectedRoute.currentLocation?.source === "traccar"
+                  ? `GPS device${selectedRoute.tracking?.deviceName ? ` · ${selectedRoute.tracking.deviceName}` : ""}`
+                  : selectedRoute.currentLocation?.source === "manual"
+                    ? "Entered manually by an operator"
+                    : "Source unknown"
+              }${
+                (selectedRoute.live?.speedKmh ??
+                  selectedRoute.currentLocation?.speedKmh ??
+                  0) > 0
+                  ? ` · ${selectedRoute.live?.speedKmh ?? selectedRoute.currentLocation?.speedKmh} km/h`
+                  : ""
+              }`}
             />
             {selectedRoute.routePlan?.totalKm != null ? (
               <InfoRow
@@ -496,7 +708,10 @@ export default function BusTrackingScreen() {
               </Text>
             </Pressable>
           ) : selectedRoute.tracking?.deviceId ? (
-            <Text style={styles.syncHint}>GPS device is connected. Automatic updates refresh every 30 seconds.</Text>
+            <Text style={styles.syncHint}>
+              GPS device is connected. Automatic updates refresh every 30
+              seconds.
+            </Text>
           ) : (
             <Text style={styles.syncHint}>
               {selectedRoute.live?.nextStop
@@ -510,14 +725,21 @@ export default function BusTrackingScreen() {
             </View>
             <View style={styles.officeCopy}>
               <Text style={styles.officeLabel}>School office</Text>
-              <Text style={styles.officeName}>{school?.name || "School contact"}</Text>
+              <Text style={styles.officeName}>
+                {school?.name || "School contact"}
+              </Text>
             </View>
             {school?.phone ? (
               <Pressable
                 style={styles.officeCall}
                 onPress={() => {
-                  void Linking.openURL(`tel:${school.phone?.replace(/[^\d+]/g, "")}`).catch(() =>
-                    Alert.alert("Unable to call", "This device cannot open the phone dialer."),
+                  void Linking.openURL(
+                    `tel:${school.phone?.replace(/[^\d+]/g, "")}`,
+                  ).catch(() =>
+                    Alert.alert(
+                      "Unable to call",
+                      "This device cannot open the phone dialer.",
+                    ),
                   );
                 }}
                 accessibilityRole="button"
@@ -533,118 +755,156 @@ export default function BusTrackingScreen() {
         </Card>
       ) : null}
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeading}>
-          <View>
-            <Text style={styles.sectionTitle}>All routes ({routes.length})</Text>
-            <Text style={styles.mapCaption}>{filteredRoutes.length} routes match your filters</Text>
-          </View>
-          <Pressable
-            onPress={() => void load(true)}
-            disabled={refreshing}
-            style={styles.refreshButton}
-            accessibilityRole="button"
-            accessibilityLabel="Refresh bus routes"
-          >
-            {refreshing ? (
-              <ActivityIndicator size="small" color={colors.ink} />
-            ) : (
-              <Ionicons name="refresh" size={17} color={colors.ink} />
-            )}
-          </Pressable>
-        </View>
-        <View style={styles.searchBox}>
-          <Ionicons name="search" size={16} color={colors.muted} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search route, vehicle, driver or stop"
-            placeholderTextColor="#98A2B3"
-            style={styles.searchInput}
-            autoCorrect={false}
-          />
-          {!!query && (
-            <Pressable onPress={() => setQuery("")} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color={colors.muted} />
-            </Pressable>
-          )}
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {STATUS_FILTERS.map((filter) => (
-            <Pressable
-              key={filter}
-              onPress={() => setStatusFilter(filter)}
-              style={[styles.filterChip, statusFilter === filter && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterText, statusFilter === filter && styles.filterTextActive]}>
-                {filter === "All" ? "All status" : filter}
+      {!isStudent && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <View>
+              <Text style={styles.sectionTitle}>
+                All routes ({routes.length})
               </Text>
+              <Text style={styles.mapCaption}>
+                {filteredRoutes.length} routes match your filters
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => void load(true)}
+              disabled={refreshing}
+              style={styles.refreshButton}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh bus routes"
+            >
+              {refreshing ? (
+                <ActivityIndicator size="small" color={colors.ink} />
+              ) : (
+                <Ionicons name="refresh" size={17} color={colors.ink} />
+              )}
             </Pressable>
-          ))}
-        </ScrollView>
-        {!routes.length ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No transport routes found</Text>
-            <Text style={styles.muted}>
-              Routes will appear here after they are configured for the school.
-            </Text>
           </View>
-        ) : !filteredRoutes.length ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No routes match these filters</Text>
-            <Text style={styles.muted}>Try another search or GPS status filter.</Text>
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={16} color={colors.muted} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search route, vehicle, driver or stop"
+              placeholderTextColor="#98A2B3"
+              style={styles.searchInput}
+              autoCorrect={false}
+            />
+            {!!query && (
+              <Pressable onPress={() => setQuery("")} hitSlop={8}>
+                <Ionicons name="close-circle" size={16} color={colors.muted} />
+              </Pressable>
+            )}
           </View>
-        ) : (
-          filteredRoutes.map((route) => {
-            const id = route._id || route.routeNo || routeName(route);
-            const position = routePosition(route);
-            const stops = (route.stops || []).map(stopName).filter(Boolean);
-            const active = selectedId === id;
-            return (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            {STATUS_FILTERS.map((filter) => (
               <Pressable
-                key={id}
-                onPress={() => focusRoute(route)}
-                style={[styles.routeCard, active && styles.routeCardActive]}
+                key={filter}
+                onPress={() => setStatusFilter(filter)}
+                style={[
+                  styles.filterChip,
+                  statusFilter === filter && styles.filterChipActive,
+                ]}
               >
-                <View style={styles.routeTop}>
-                  <View style={styles.routeHeading}>
-                    <Text style={styles.routeName}>Route {routeName(route)}</Text>
-                    <Text style={[styles.status, position ? styles.statusLive : styles.statusNoGps]}>
-                      {position ? "Live GPS" : "No GPS signal"}
-                    </Text>
-                  </View>
-                  <Text style={styles.vehicle}>{route.vehicleNo || "No vehicle"}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Driver</Text>
-                  <Text style={styles.detailValue}>{route.driverName || "Not assigned"}</Text>
-                </View>
-                {route.driverContact ? (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Contact</Text>
-                    <Text style={styles.detailValue}>{route.driverContact}</Text>
-                  </View>
-                ) : null}
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Students</Text>
-                  <Text style={styles.detailValue}>
-                    {route.assignedStudents?.length || 0} assigned
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Stops</Text>
-                  <Text style={styles.detailValue} numberOfLines={2}>
-                    {stops.length ? stops.join("  →  ") : "No stops configured"}
-                  </Text>
-                </View>
-                <Text style={styles.updated}>
-                  {lastUpdated(route.currentLocation?.updatedAt)}
+                <Text
+                  style={[
+                    styles.filterText,
+                    statusFilter === filter && styles.filterTextActive,
+                  ]}
+                >
+                  {filter === "All" ? "All status" : filter}
                 </Text>
               </Pressable>
-            );
-          })
-        )}
-      </View>
+            ))}
+          </ScrollView>
+          {!routes.length ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No transport routes found</Text>
+              <Text style={styles.muted}>
+                Routes will appear here after they are configured for the
+                school.
+              </Text>
+            </View>
+          ) : !filteredRoutes.length ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>
+                No routes match these filters
+              </Text>
+              <Text style={styles.muted}>
+                Try another search or GPS status filter.
+              </Text>
+            </View>
+          ) : (
+            filteredRoutes.map((route) => {
+              const id = route._id || route.routeNo || routeName(route);
+              const position = routePosition(route);
+              const stops = (route.stops || []).map(stopName).filter(Boolean);
+              const active = selectedId === id;
+              return (
+                <Pressable
+                  key={id}
+                  onPress={() => focusRoute(route)}
+                  style={[styles.routeCard, active && styles.routeCardActive]}
+                >
+                  <View style={styles.routeTop}>
+                    <View style={styles.routeHeading}>
+                      <Text style={styles.routeName}>
+                        Route {routeName(route)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.status,
+                          position ? styles.statusLive : styles.statusNoGps,
+                        ]}
+                      >
+                        {position ? "Live GPS" : "No GPS signal"}
+                      </Text>
+                    </View>
+                    <Text style={styles.vehicle}>
+                      {route.vehicleNo || "No vehicle"}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Driver</Text>
+                    <Text style={styles.detailValue}>
+                      {route.driverName || "Not assigned"}
+                    </Text>
+                  </View>
+                  {route.driverContact ? (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Contact</Text>
+                      <Text style={styles.detailValue}>
+                        {route.driverContact}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Students</Text>
+                    <Text style={styles.detailValue}>
+                      {route.assignedStudents?.length || 0} assigned
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Stops</Text>
+                    <Text style={styles.detailValue} numberOfLines={2}>
+                      {stops.length
+                        ? stops.join("  →  ")
+                        : "No stops configured"}
+                    </Text>
+                  </View>
+                  <Text style={styles.updated}>
+                    {lastUpdated(route.currentLocation?.updatedAt)}
+                  </Text>
+                </Pressable>
+              );
+            })
+          )}
+        </View>
+      )}
       {selectedRoute ? <View style={styles.bottomSpace} /> : null}
     </ScrollView>
   );
@@ -662,7 +922,9 @@ function MetricCard({
   return (
     <View style={styles.statCard}>
       <Ionicons name={icon} size={15} color={colors.amberDark} />
-      <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.statValue} numberOfLines={1}>
+        {value}
+      </Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -682,7 +944,9 @@ function SmallMetric({
       <Text style={styles.smallMetricLabel}>
         <Ionicons name={icon} size={11} color={colors.muted} /> {label}
       </Text>
-      <Text style={styles.smallMetricValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.smallMetricValue} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -700,7 +964,9 @@ function InfoRow({
     <View style={styles.infoRow}>
       <Ionicons name={icon} size={14} color={colors.muted} />
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue} numberOfLines={2}>{value}</Text>
+      <Text style={styles.infoValue} numberOfLines={2}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -717,14 +983,31 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: "row", alignItems: "center", gap: 12 },
   headerCopy: { flex: 1, gap: 3 },
-  eyebrow: { color: colors.amberDark, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
+  eyebrow: {
+    color: colors.amberDark,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
   title: { color: colors.ink, fontSize: 23, fontWeight: "800" },
   subtitle: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-  providerBanner: { flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },
+  providerBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
   providerReady: { backgroundColor: "#E8F7EF" },
   providerWarning: { backgroundColor: "#FFF4DF" },
   providerNeutral: { backgroundColor: "#F0F2F5" },
-  providerText: { flex: 1, color: colors.muted, fontSize: 10, fontWeight: "700" },
+  providerText: {
+    flex: 1,
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "700",
+  },
   refreshButton: {
     backgroundColor: "#fff",
     borderColor: colors.border,
@@ -760,8 +1043,22 @@ const styles = StyleSheet.create({
   statLabel: { color: colors.muted, fontSize: 9 },
   section: { gap: 10 },
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-  sectionHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  liveCount: { color: "#287347", backgroundColor: "#E8F7EF", overflow: "hidden", borderRadius: 9, paddingHorizontal: 8, paddingVertical: 5, fontSize: 9, fontWeight: "800" },
+  sectionHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  liveCount: {
+    color: "#287347",
+    backgroundColor: "#E8F7EF",
+    overflow: "hidden",
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    fontSize: 9,
+    fontWeight: "800",
+  },
   mapFrame: {
     height: 280,
     borderRadius: 16,
@@ -784,7 +1081,14 @@ const styles = StyleSheet.create({
   mapCaption: { color: colors.muted, fontSize: 11, lineHeight: 16 },
   detailCard: { gap: 12, padding: 14 },
   detailHeader: { flexDirection: "row", alignItems: "center", gap: 9 },
-  busIcon: { width: 39, height: 39, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF4DF" },
+  busIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF4DF",
+  },
   detailTitleWrap: { flex: 1, gap: 3 },
   detailSubtitle: { color: colors.muted, fontSize: 10 },
   gpsBadge: { borderRadius: 9, paddingHorizontal: 8, paddingVertical: 5 },
@@ -794,25 +1098,82 @@ const styles = StyleSheet.create({
   gpsLiveText: { color: "#287347" },
   gpsStaleText: { color: colors.muted },
   routeMetrics: { flexDirection: "row", gap: 7 },
-  smallMetric: { flex: 1, minWidth: 0, borderRadius: 9, backgroundColor: colors.paper, padding: 8, gap: 4 },
+  smallMetric: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 9,
+    backgroundColor: colors.paper,
+    padding: 8,
+    gap: 4,
+  },
   smallMetricLabel: { color: colors.muted, fontSize: 8 },
   smallMetricValue: { color: colors.ink, fontSize: 10, fontWeight: "800" },
-  routeInfoBox: { backgroundColor: colors.paper, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9, gap: 9 },
+  routeInfoBox: {
+    backgroundColor: colors.paper,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    gap: 9,
+  },
   infoRow: { flexDirection: "row", alignItems: "flex-start", gap: 7 },
   infoLabel: { width: 76, color: colors.muted, fontSize: 9 },
-  infoValue: { flex: 1, color: colors.ink, fontSize: 9, fontWeight: "600", textAlign: "right" },
+  infoValue: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 9,
+    fontWeight: "600",
+    textAlign: "right",
+  },
   progressMetrics: { flexDirection: "row", gap: 6 },
-  driverCall: { flexDirection: "row", alignSelf: "flex-end", alignItems: "center", gap: 5, paddingVertical: 3 },
+  driverCall: {
+    flexDirection: "row",
+    alignSelf: "flex-end",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 3,
+  },
   driverCallText: { color: "#287347", fontSize: 10, fontWeight: "700" },
-  syncButton: { minHeight: 39, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 7, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff" },
+  syncButton: {
+    minHeight: 39,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#fff",
+  },
   syncButtonText: { color: colors.ink, fontSize: 10, fontWeight: "800" },
   syncHint: { color: colors.muted, fontSize: 9, lineHeight: 14 },
-  officeContact: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingTop: 10 },
-  officeIcon: { width: 30, height: 30, borderRadius: 9, backgroundColor: "#F0F2F5", alignItems: "center", justifyContent: "center" },
+  officeContact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingTop: 10,
+  },
+  officeIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: "#F0F2F5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   officeCopy: { flex: 1, gap: 2 },
   officeLabel: { color: colors.muted, fontSize: 8 },
   officeName: { color: colors.ink, fontSize: 10, fontWeight: "700" },
-  officeCall: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8, backgroundColor: "#E8F7EF" },
+  officeCall: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#E8F7EF",
+  },
   officeCallText: { color: "#287347", fontSize: 9, fontWeight: "800" },
   emptyCard: {
     padding: 18,
@@ -824,10 +1185,27 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { color: colors.ink, fontSize: 14, fontWeight: "700" },
   muted: { color: colors.muted, fontSize: 12 },
-  searchBox: { minHeight: 41, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: "#fff", paddingHorizontal: 10 },
+  searchBox: {
+    minHeight: 41,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+  },
   searchInput: { flex: 1, color: colors.ink, fontSize: 10, paddingVertical: 8 },
   filterRow: { flexDirection: "row", gap: 7 },
-  filterChip: { borderWidth: 1, borderColor: colors.border, backgroundColor: "#fff", borderRadius: 9, paddingHorizontal: 9, paddingVertical: 6 },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#fff",
+    borderRadius: 9,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
   filterChipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   filterText: { color: colors.muted, fontSize: 9, fontWeight: "700" },
   filterTextActive: { color: "#fff" },
@@ -840,7 +1218,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   routeCardActive: { borderColor: colors.amberDark },
-  routeTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 },
+  routeTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   routeHeading: { flex: 1, gap: 5 },
   routeName: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   status: { alignSelf: "flex-start", fontSize: 10, fontWeight: "800" },
@@ -849,7 +1232,13 @@ const styles = StyleSheet.create({
   vehicle: { color: colors.ink, fontSize: 11, fontWeight: "700" },
   detailRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   detailLabel: { color: colors.muted, fontSize: 11, width: 66 },
-  detailValue: { flex: 1, color: colors.ink, fontSize: 11, fontWeight: "600", textAlign: "right" },
+  detailValue: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "right",
+  },
   updated: { color: colors.muted, fontSize: 10, paddingTop: 2 },
   bottomSpace: { height: 4 },
 });

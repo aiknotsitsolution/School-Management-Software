@@ -57,11 +57,17 @@ type Exam = Row & {
   date?: string;
   term?: string;
   session?: string;
+  kind?: string;
+  cceTool?: string;
 };
+
+type AssessmentKind = "fa" | "sa" | "term" | "other";
 
 type TermSummary = {
   examName: string;
   termLabel: string;
+  assessmentLabel: string;
+  assessmentKind: AssessmentKind;
   count: number;
   obtained: number;
   max: number;
@@ -109,6 +115,40 @@ const termLabelFor = (examName: string, exam?: Exam) => {
   const match = /term\s*([12])/i.exec(examName);
   if (match) return `Term ${match[1]}`;
   return /final/i.test(examName) ? "Final" : examName;
+};
+
+const assessmentFor = (examName: string, exam?: Exam) => {
+  const termLabel = termLabelFor(examName, exam);
+  const assessment = /\b(FA|SA)\s*([1-4])\b/i.exec(
+    `${exam?.cceTool || ""} ${examName}`,
+  );
+  if (assessment) {
+    const kind = assessment[1].toLowerCase() as "fa" | "sa";
+    return {
+      assessmentKind: kind,
+      assessmentLabel: `${assessment[1].toUpperCase()} ${assessment[2]}`,
+      termLabel,
+    };
+  }
+  if (exam?.kind === "fa" || exam?.kind === "sa") {
+    return {
+      assessmentKind: exam.kind as "fa" | "sa",
+      assessmentLabel: exam.kind.toUpperCase(),
+      termLabel,
+    };
+  }
+  if (exam?.kind === "term" || termLabel !== examName) {
+    return {
+      assessmentKind: "term" as const,
+      assessmentLabel: termLabel,
+      termLabel,
+    };
+  }
+  return {
+    assessmentKind: "other" as const,
+    assessmentLabel: examName,
+    termLabel,
+  };
 };
 
 const gradeFor = (percentage: number, report?: Report | null) => {
@@ -169,11 +209,12 @@ export default function StudentResultsScreen() {
     setSelectedReport(null);
 
     try {
-      const [profileResult, summaryResult, examsResult] = await Promise.allSettled([
-        get<StudentProfile>("/students/me"),
-        get<Report>("/marks/report-card"),
-        get<Exam[]>("/exams?limit=500"),
-      ]);
+      const [profileResult, summaryResult, examsResult] =
+        await Promise.allSettled([
+          get<StudentProfile>("/students/me"),
+          get<Report>("/marks/report-card"),
+          get<Exam[]>("/exams?limit=500"),
+        ]);
       if (summaryResult.status === "rejected") throw summaryResult.reason;
       setProfile(
         profileResult.status === "fulfilled" ? profileResult.value.data : null,
@@ -211,12 +252,14 @@ export default function StudentResultsScreen() {
 
   const terms = useMemo(() => {
     const groups = new Map<string, ResultSubject[]>();
-    (Array.isArray(summary?.subjects) ? summary.subjects : []).forEach((row) => {
-      const key = String(row.examName || "All");
-      const group = groups.get(key) || [];
-      group.push(row);
-      groups.set(key, group);
-    });
+    (Array.isArray(summary?.subjects) ? summary.subjects : []).forEach(
+      (row) => {
+        const key = String(row.examName || "All");
+        const group = groups.get(key) || [];
+        group.push(row);
+        groups.set(key, group);
+      },
+    );
     const examByName = new Map<string, Exam>();
     exams.forEach((exam) => {
       const name = String(exam.examName || "");
@@ -234,9 +277,10 @@ export default function StudentResultsScreen() {
         );
         const percentage = max ? Math.round((obtained / max) * 100) : 0;
         const exam = examByName.get(examName);
+        const assessment = assessmentFor(examName, exam);
         return {
           examName,
-          termLabel: termLabelFor(examName, exam),
+          ...assessment,
           count: subjects.length,
           obtained,
           max,
@@ -293,13 +337,22 @@ export default function StudentResultsScreen() {
       typeof subject.passed === "boolean"
         ? subject.passed
         : number(subject.maxMarks) > 0 &&
-          number(subject.marksObtained) / number(subject.maxMarks) * 100 >=
+          (number(subject.marksObtained) / number(subject.maxMarks)) * 100 >=
             number(subject.passingMarks ?? selectedReport?.passPct ?? 33),
     );
   const attendance =
     selectedReport?.attendance && typeof selectedReport.attendance === "object"
       ? selectedReport.attendance
       : null;
+  const selectedTerm = terms.find((term) => term.examName === selectedExam);
+  const assessmentEyebrow =
+    selectedTerm?.assessmentKind === "fa"
+      ? "FORMATIVE ASSESSMENT"
+      : selectedTerm?.assessmentKind === "sa"
+        ? "SUMMATIVE ASSESSMENT"
+        : selectedTerm?.assessmentKind === "term"
+          ? "TERM REPORT"
+          : "ACADEMICS";
 
   return (
     <ScrollView
@@ -317,12 +370,26 @@ export default function StudentResultsScreen() {
         <View style={styles.heroIcon}>
           <Ionicons name="bar-chart" size={24} color={colors.amberDark} />
         </View>
-        <Text style={styles.eyebrow}>ACADEMICS</Text>
+        <Text style={styles.eyebrow}>
+          {selectedExam ? assessmentEyebrow : "ACADEMICS"}
+        </Text>
         <Text style={styles.title}>
-          {selectedExam ? "Report Card" : "My Results"}
+          {selectedExam
+            ? selectedTerm?.assessmentLabel || "Report Card"
+            : "My Results"}
         </Text>
         <Text style={styles.subtitle}>
-          {selectedExam || "Your published report cards for this session."}
+          {selectedExam
+            ? [
+                selectedTerm?.termLabel !== selectedTerm?.assessmentLabel &&
+                selectedTerm?.termLabel !== selectedExam
+                  ? selectedTerm?.termLabel
+                  : "",
+                selectedExam,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : "Your published report cards for this session."}
         </Text>
       </View>
 
@@ -342,15 +409,25 @@ export default function StudentResultsScreen() {
             <Text style={styles.backText}>All results</Text>
           </Pressable>
           {detailLoading ? (
-            <ActivityIndicator size="large" color={colors.info} style={styles.loading} />
+            <ActivityIndicator
+              size="large"
+              color={colors.info}
+              style={styles.loading}
+            />
           ) : detailError ? (
             <Card style={styles.stateCard}>
-              <Ionicons name="cloud-offline-outline" size={30} color={colors.alert} />
+              <Ionicons
+                name="cloud-offline-outline"
+                size={30}
+                color={colors.alert}
+              />
               <Text style={styles.errorText}>{detailError}</Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() => {
-                  const term = terms.find((item) => item.examName === selectedExam);
+                  const term = terms.find(
+                    (item) => item.examName === selectedExam,
+                  );
                   if (term) void openTerm(term);
                 }}
                 style={styles.retryButton}
@@ -395,7 +472,12 @@ export default function StudentResultsScreen() {
                     <Text
                       style={[
                         styles.scorePercentage,
-                        { color: reportPercentage >= 40 ? colors.success : colors.alert },
+                        {
+                          color:
+                            reportPercentage >= 40
+                              ? colors.success
+                              : colors.alert,
+                        },
                       ]}
                     >
                       {reportMax ? `${reportPercentage.toFixed(1)}%` : "—"}
@@ -445,7 +527,11 @@ export default function StudentResultsScreen() {
                         },
                       ]}
                     >
-                      {reportMax ? (reportPassed ? "PASS" : "NEEDS WORK") : "PENDING"}
+                      {reportMax
+                        ? reportPassed
+                          ? "PASS"
+                          : "NEEDS WORK"
+                        : "PENDING"}
                     </Text>
                   </View>
                 </View>
@@ -456,20 +542,25 @@ export default function StudentResultsScreen() {
                       {
                         width: `${Math.min(100, Math.max(0, reportPercentage))}%`,
                         backgroundColor:
-                          reportPercentage >= 40 ? colors.success : colors.alert,
+                          reportPercentage >= 40
+                            ? colors.success
+                            : colors.alert,
                       },
                     ]}
                   />
                 </View>
                 <Text style={styles.scoreCaption}>
                   {detailSubjects.length}{" "}
-                  {detailSubjects.length === 1 ? "subject" : "subjects"} included
+                  {detailSubjects.length === 1 ? "subject" : "subjects"}{" "}
+                  included
                 </Text>
               </Card>
               <View style={styles.statsGrid}>
                 <Stat
                   label="Grade"
-                  value={reportMax ? gradeFor(reportPercentage, selectedReport) : "—"}
+                  value={
+                    reportMax ? gradeFor(reportPercentage, selectedReport) : "—"
+                  }
                   color={colors.info}
                 />
                 <Stat
@@ -484,7 +575,11 @@ export default function StudentResultsScreen() {
               {attendance ? (
                 <Card style={styles.attendanceCard}>
                   <View style={styles.sectionHeader}>
-                    <Ionicons name="calendar-outline" size={18} color={colors.info} />
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color={colors.info}
+                    />
                     <Text style={styles.sectionTitle}>Attendance</Text>
                   </View>
                   <Text style={styles.attendanceValue}>
@@ -501,8 +596,10 @@ export default function StudentResultsScreen() {
                     />
                   </View>
                   <Text style={styles.studentDetails}>
-                    {number(attendance.present)} present · {number(attendance.absent)} absent ·{" "}
-                    {number(attendance.leave)} leave · {number(attendance.workingDays)} working days
+                    {number(attendance.present)} present ·{" "}
+                    {number(attendance.absent)} absent ·{" "}
+                    {number(attendance.leave)} leave ·{" "}
+                    {number(attendance.workingDays)} working days
                   </Text>
                 </Card>
               ) : null}
@@ -515,7 +612,9 @@ export default function StudentResultsScreen() {
                     </Text>
                   </View>
                   <View style={styles.countBadge}>
-                    <Text style={styles.countText}>{detailSubjects.length}</Text>
+                    <Text style={styles.countText}>
+                      {detailSubjects.length}
+                    </Text>
                   </View>
                 </View>
                 {detailSubjects.length ? (
@@ -532,13 +631,19 @@ export default function StudentResultsScreen() {
                         typeof subject.passed === "boolean"
                           ? subject.passed
                           : subjectPercentage >=
-                            number(subject.passingMarks ?? selectedReport.passPct ?? 33);
+                            number(
+                              subject.passingMarks ??
+                                selectedReport.passPct ??
+                                33,
+                            );
                       return (
                         <View
                           key={`${subject.subject || "subject"}-${index}`}
                           style={[
                             styles.subjectRow,
-                            index === detailSubjects.length - 1 ? styles.lastSubjectRow : null,
+                            index === detailSubjects.length - 1
+                              ? styles.lastSubjectRow
+                              : null,
                           ]}
                         >
                           <View style={styles.subjectCopy}>
@@ -556,13 +661,17 @@ export default function StudentResultsScreen() {
                                   styles.subjectScoreFill,
                                   {
                                     width: `${Math.min(100, Math.max(0, subjectPercentage))}%`,
-                                    backgroundColor: passed ? colors.success : colors.alert,
+                                    backgroundColor: passed
+                                      ? colors.success
+                                      : colors.alert,
                                   },
                                 ]}
                               />
                             </View>
                             {subject.remarks ? (
-                              <Text style={styles.remark}>{subject.remarks}</Text>
+                              <Text style={styles.remark}>
+                                {subject.remarks}
+                              </Text>
                             ) : null}
                           </View>
                           <View
@@ -574,10 +683,13 @@ export default function StudentResultsScreen() {
                             <Text
                               style={[
                                 styles.gradeText,
-                                passed ? styles.gradePassText : styles.gradeFailText,
+                                passed
+                                  ? styles.gradePassText
+                                  : styles.gradeFailText,
                               ]}
                             >
-                              {subject.grade || gradeFor(subjectPercentage, selectedReport)}
+                              {subject.grade ||
+                                gradeFor(subjectPercentage, selectedReport)}
                             </Text>
                           </View>
                         </View>
@@ -591,24 +703,38 @@ export default function StudentResultsScreen() {
                     </View>
                   </>
                 ) : (
-                  <Empty text={`No published marks recorded for ${selectedExam}.`} />
+                  <Empty
+                    text={`No published marks recorded for ${selectedExam}.`}
+                  />
                 )}
               </Card>
               <Card style={styles.note}>
-                <Ionicons name="information-circle-outline" size={18} color={colors.info} />
+                <Ionicons
+                  name="information-circle-outline"
+                  size={18}
+                  color={colors.info}
+                />
                 <Text style={styles.noteText}>
-                  Results are published by your teachers. Contact the school office
-                  if you have a question about these marks.
+                  Results are published by your teachers. Contact the school
+                  office if you have a question about these marks.
                 </Text>
               </Card>
             </>
           ) : null}
         </>
       ) : loading ? (
-        <ActivityIndicator size="large" color={colors.info} style={styles.loading} />
+        <ActivityIndicator
+          size="large"
+          color={colors.info}
+          style={styles.loading}
+        />
       ) : error ? (
         <Card style={styles.stateCard}>
-          <Ionicons name="cloud-offline-outline" size={30} color={colors.alert} />
+          <Ionicons
+            name="cloud-offline-outline"
+            size={30}
+            color={colors.alert}
+          />
           <Text style={styles.errorText}>{error}</Text>
           <Pressable
             accessibilityRole="button"
@@ -627,7 +753,11 @@ export default function StudentResultsScreen() {
             </Card>
           ) : null}
           <Card style={styles.stateCard}>
-            <Ionicons name="document-text-outline" size={38} color={colors.muted} />
+            <Ionicons
+              name="document-text-outline"
+              size={38}
+              color={colors.muted}
+            />
             <Text style={styles.stateTitle}>No results published</Text>
             <Text style={styles.stateMessage}>
               Your report cards will appear here once teachers publish them.
@@ -643,7 +773,11 @@ export default function StudentResultsScreen() {
           ) : null}
           <View style={styles.listHeading}>
             <View style={styles.listIcon}>
-              <Ionicons name="documents-outline" size={18} color={colors.info} />
+              <Ionicons
+                name="documents-outline"
+                size={18}
+                color={colors.info}
+              />
             </View>
             <View style={styles.listHeadingCopy}>
               <Text style={styles.sectionTitle}>Published Results</Text>
@@ -660,19 +794,54 @@ export default function StudentResultsScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Open ${term.examName} results`}
               onPress={() => void openTerm(term)}
-              style={({ pressed }) => pressed ? styles.termPressed : undefined}
+              style={({ pressed }) =>
+                pressed ? styles.termPressed : undefined
+              }
             >
               <Card style={styles.termCard}>
                 <View style={styles.termTop}>
                   <View style={styles.termIcon}>
-                    <Ionicons name="document-text" size={19} color={colors.info} />
+                    <Ionicons
+                      name="document-text"
+                      size={19}
+                      color={colors.info}
+                    />
                   </View>
                   <View style={styles.termCopy}>
                     <Text numberOfLines={1} style={styles.termName}>
                       {term.examName}
                     </Text>
-                    {term.termLabel !== term.examName ? (
-                      <Text style={styles.termLabel}>{term.termLabel}</Text>
+                    {term.assessmentKind !== "other" ? (
+                      <View
+                        style={[
+                          styles.assessmentBadge,
+                          term.assessmentKind === "fa"
+                            ? styles.faBadge
+                            : term.assessmentKind === "sa"
+                              ? styles.saBadge
+                              : styles.termBadge,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.assessmentBadgeText,
+                            term.assessmentKind === "fa"
+                              ? styles.faBadgeText
+                              : term.assessmentKind === "sa"
+                                ? styles.saBadgeText
+                                : styles.termBadgeText,
+                          ]}
+                        >
+                          {term.assessmentLabel}
+                          {term.assessmentKind === "fa" ||
+                          term.assessmentKind === "sa"
+                            ? term.termLabel !== term.examName &&
+                              term.termLabel !== term.assessmentLabel
+                              ? ` · ${term.termLabel}`
+                              : ""
+                            : ""}
+                        </Text>
+                      </View>
                     ) : null}
                     <Text style={styles.termMeta}>
                       {term.count} {term.count === 1 ? "subject" : "subjects"}
@@ -680,17 +849,23 @@ export default function StudentResultsScreen() {
                     </Text>
                   </View>
                   <View style={styles.termScore}>
-                    <Text style={styles.termPercentage}>{term.percentage}%</Text>
+                    <Text style={styles.termPercentage}>
+                      {term.percentage}%
+                    </Text>
                     <View
                       style={[
                         styles.gradeBadge,
-                        term.percentage >= 40 ? styles.gradePass : styles.gradeFail,
+                        term.percentage >= 40
+                          ? styles.gradePass
+                          : styles.gradeFail,
                       ]}
                     >
                       <Text
                         style={[
                           styles.gradeText,
-                          term.percentage >= 40 ? styles.gradePassText : styles.gradeFailText,
+                          term.percentage >= 40
+                            ? styles.gradePassText
+                            : styles.gradeFailText,
                         ]}
                       >
                         {term.grade}
@@ -705,7 +880,8 @@ export default function StudentResultsScreen() {
                       styles.termProgressFill,
                       {
                         width: `${Math.min(100, Math.max(0, term.percentage))}%`,
-                        backgroundColor: term.percentage >= 40 ? colors.success : colors.alert,
+                        backgroundColor:
+                          term.percentage >= 40 ? colors.success : colors.alert,
                       },
                     ]}
                   />
@@ -717,10 +893,14 @@ export default function StudentResultsScreen() {
             </Pressable>
           ))}
           <Card style={styles.note}>
-            <Ionicons name="information-circle-outline" size={18} color={colors.info} />
+            <Ionicons
+              name="information-circle-outline"
+              size={18}
+              color={colors.info}
+            />
             <Text style={styles.noteText}>
-              Results are published by teachers for your class. Contact the school
-              office for any discrepancy.
+              Results are published by teachers for your class. Contact the
+              school office for any discrepancy.
             </Text>
           </Card>
         </>
@@ -749,7 +929,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     marginBottom: 14,
   },
-  eyebrow: { color: "#F0C77F", fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  eyebrow: {
+    color: "#F0C77F",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
   title: { color: "#fff", fontSize: 25, fontWeight: "900", marginTop: 5 },
   subtitle: { color: "#D7DCE8", fontSize: 12, lineHeight: 18, marginTop: 7 },
   loading: { marginVertical: 30 },
@@ -761,8 +946,18 @@ const styles = StyleSheet.create({
     padding: 22,
   },
   stateTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
-  stateMessage: { color: colors.muted, fontSize: 12, lineHeight: 17, textAlign: "center" },
-  errorText: { color: colors.alert, fontSize: 12, lineHeight: 17, textAlign: "center" },
+  stateMessage: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+  },
+  errorText: {
+    color: colors.alert,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+  },
   warningCard: { borderColor: colors.amber },
   warningText: { color: colors.amberDark, fontSize: 11, lineHeight: 16 },
   retryButton: {
@@ -817,15 +1012,37 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   scoreCard: { gap: 12, padding: 17 },
-  scoreTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  scoreTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   scoreCopy: { flex: 1, gap: 3 },
-  scoreEyebrow: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.1 },
+  scoreEyebrow: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
   scorePercentage: { fontSize: 34, lineHeight: 40, fontWeight: "900" },
   scoreMarks: { color: colors.muted, fontSize: 11 },
-  resultBadge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 7 },
+  resultBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+  },
   resultPending: { backgroundColor: "#F0F1F3" },
   resultBadgeText: { fontSize: 9, fontWeight: "900" },
-  scoreTrack: { height: 8, borderRadius: 6, backgroundColor: "#EEF0F3", overflow: "hidden" },
+  scoreTrack: {
+    height: 8,
+    borderRadius: 6,
+    backgroundColor: "#EEF0F3",
+    overflow: "hidden",
+  },
   scoreFill: { height: "100%", borderRadius: 6 },
   scoreCaption: { color: colors.muted, fontSize: 10 },
   statsGrid: { flexDirection: "row", gap: 9 },
@@ -840,8 +1057,17 @@ const styles = StyleSheet.create({
   statLabel: { color: colors.muted, fontSize: 10, marginTop: 4 },
   attendanceCard: { gap: 8 },
   attendanceValue: { color: colors.info, fontSize: 24, fontWeight: "900" },
-  attendanceTrack: { height: 6, borderRadius: 5, backgroundColor: "#EEF0F3", overflow: "hidden" },
-  attendanceFill: { height: "100%", borderRadius: 5, backgroundColor: colors.info },
+  attendanceTrack: {
+    height: 6,
+    borderRadius: 5,
+    backgroundColor: "#EEF0F3",
+    overflow: "hidden",
+  },
+  attendanceFill: {
+    height: "100%",
+    borderRadius: 5,
+    backgroundColor: colors.info,
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -875,13 +1101,29 @@ const styles = StyleSheet.create({
   },
   lastSubjectRow: { borderBottomWidth: 0 },
   subjectCopy: { flex: 1, minWidth: 0, gap: 7 },
-  subjectTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  subjectTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   subjectName: { flex: 1, color: colors.ink, fontSize: 12, fontWeight: "800" },
   remark: { color: colors.muted, fontSize: 10, lineHeight: 14 },
-  subjectScoreTrack: { height: 5, borderRadius: 4, backgroundColor: "#EEF0F3", overflow: "hidden" },
+  subjectScoreTrack: {
+    height: 5,
+    borderRadius: 4,
+    backgroundColor: "#EEF0F3",
+    overflow: "hidden",
+  },
   subjectScoreFill: { height: "100%", borderRadius: 4 },
   marks: { color: colors.ink, fontSize: 11, fontWeight: "800" },
-  gradeBadge: { minWidth: 36, alignItems: "center", borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 },
+  gradeBadge: {
+    minWidth: 36,
+    alignItems: "center",
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   gradePass: { backgroundColor: "#EAF5EE" },
   gradeFail: { backgroundColor: "#FCEDEA" },
   gradeText: { fontSize: 10, fontWeight: "900" },
@@ -904,7 +1146,13 @@ const styles = StyleSheet.create({
     borderColor: "#DCEAF3",
   },
   noteText: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 16 },
-  listHeading: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 5, marginBottom: 1 },
+  listHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 5,
+    marginBottom: 1,
+  },
   listIcon: {
     width: 36,
     height: 36,
@@ -928,11 +1176,33 @@ const styles = StyleSheet.create({
   },
   termCopy: { flex: 1, minWidth: 0, gap: 4 },
   termName: { color: colors.ink, fontSize: 13, fontWeight: "800" },
-  termLabel: { color: colors.info, fontSize: 10, fontWeight: "800" },
+  assessmentBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  faBadge: { backgroundColor: "#FFF1DD" },
+  saBadge: { backgroundColor: "#EAF5EE" },
+  termBadge: { backgroundColor: "#EAF2F8" },
+  assessmentBadgeText: { fontSize: 9, fontWeight: "900" },
+  faBadgeText: { color: colors.amberDark },
+  saBadgeText: { color: colors.success },
+  termBadgeText: { color: colors.info },
   termMeta: { color: colors.muted, fontSize: 10, lineHeight: 14 },
   termScore: { alignItems: "flex-end", gap: 5 },
   termPercentage: { color: colors.ink, fontSize: 18, fontWeight: "900" },
-  termProgressTrack: { height: 6, borderRadius: 5, backgroundColor: "#EEF0F3", overflow: "hidden" },
+  termProgressTrack: {
+    height: 6,
+    borderRadius: 5,
+    backgroundColor: "#EEF0F3",
+    overflow: "hidden",
+  },
   termProgressFill: { height: "100%", borderRadius: 5 },
-  termMarks: { alignSelf: "flex-end", color: colors.muted, fontSize: 10, fontWeight: "600" },
+  termMarks: {
+    alignSelf: "flex-end",
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "600",
+  },
 });

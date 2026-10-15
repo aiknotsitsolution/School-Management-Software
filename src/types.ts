@@ -555,6 +555,8 @@ export interface Notice {
   title: string;
   body: string;
   description?: string;
+  senderName?: string;
+  postedBy?: string;
   category?: string;
   audience?: string[];
   classTags?: string[];

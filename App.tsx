@@ -56,8 +56,10 @@ import { NotificationsProvider } from "./src/context/NotificationsContext";
 import BusTrackingScreen from "./src/screens/BusTrackingScreen";
 import IdCardScreen from "./src/screens/IdCardScreen";
 import UploadDocumentScreen from "./src/screens/UploadDocumentScreen";
+import StudentDocumentsScreen from "./src/screens/StudentDocumentsScreen";
 import StaffScreen from "./src/screens/StaffScreen";
 import FeesCollectionScreen from "./src/screens/FeesCollectionScreen";
+import StudentFeesScreen from "./src/screens/StudentFeesScreen";
 import HomeworkScreen from "./src/screens/HomeworkScreen";
 import LeaveScreen from "./src/screens/LeaveScreen";
 import PayrollScreen from "./src/screens/PayrollScreen";
@@ -100,6 +102,7 @@ export type RootStackParams = {
   BusTracking: undefined;
   IdCard: undefined;
   UploadDocument: undefined;
+  StudentDocuments: undefined;
   MarkAttendance: undefined;
   Attendance: undefined;
   AttendanceHistory: undefined;
@@ -108,6 +111,7 @@ export type RootStackParams = {
   StudentExams: undefined;
   Staff: undefined;
   FeesCollection: undefined;
+  StudentFees: undefined;
   ManageSchool: undefined;
   Subscription: undefined;
   Homework: undefined;
@@ -277,7 +281,9 @@ function Root() {
       <Stack.Screen
         name="NoticeBoard"
         component={NoticesScreen}
-        options={{ title: "Notice Board" }}
+        options={{
+          title: user.role === "student" ? "Notices" : "Notice Board",
+        }}
       />
       <Stack.Screen
         name="MessageBoard"
@@ -405,12 +411,16 @@ function Root() {
       <Stack.Screen
         name="Hostel"
         component={HostelScreen}
-        options={{ title: "Hostel Management" }}
+        options={{
+          title: user.role === "student" ? "My Hostel" : "Hostel Management",
+        }}
       />
       <Stack.Screen
         name="BusTracking"
         component={BusTrackingScreen}
-        options={{ title: "Bus Tracking" }}
+        options={{
+          title: user.role === "student" ? "My School Bus" : "Bus Tracking",
+        }}
       />
       <Stack.Screen
         name="IdCard"
@@ -421,6 +431,11 @@ function Root() {
         name="UploadDocument"
         component={UploadDocumentScreen}
         options={{ title: "Upload Document" }}
+      />
+      <Stack.Screen
+        name="StudentDocuments"
+        component={StudentDocumentsScreen}
+        options={{ title: "My Documents" }}
       />
       <Stack.Screen name="Edit" component={EditRecordScreen} />
       <Stack.Screen
@@ -461,7 +476,7 @@ function Root() {
       <Stack.Screen
         name="Notifications"
         component={NotificationsScreen}
-        options={{ title: "Alerts" }}
+        options={{ title: "Notifications" }}
       />
       <Stack.Screen
         name="Leave"
@@ -477,6 +492,11 @@ function Root() {
         name="OnlinePayment"
         component={OnlinePaymentScreen}
         options={{ title: "Online Fees Payment" }}
+      />
+      <Stack.Screen
+        name="StudentFees"
+        component={StudentFeesScreen}
+        options={{ title: "My Fees" }}
       />
       <Stack.Screen
         name="SchoolReports"

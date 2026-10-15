@@ -214,7 +214,9 @@ export const api = {
         byClass?: { _id?: string; count?: number }[];
       }>("/students/stats/summary"),
     pendingRegistrations: (p?: string) =>
-      request<Record<string, unknown>[]>(`/students/pending-registrations${q(p)}`),
+      request<Record<string, unknown>[]>(
+        `/students/pending-registrations${q(p)}`,
+      ),
   },
   users: {
     list: (p?: string) => request<User[]>(`/auth/users${q(p)}`),
@@ -391,10 +393,7 @@ export const api = {
           "POST",
           payload,
         ),
-      setStatus: (
-        id: string,
-        status: "completed" | "cancelled",
-      ) =>
+      setStatus: (id: string, status: "completed" | "cancelled") =>
         send<TimetableSubstitution>(
           `/timetable/substitutions/${encodeURIComponent(id)}/status`,
           "PATCH",
@@ -493,15 +492,10 @@ export const api = {
       reason: string;
     }) => send<LeaveRequest>("/leaves", "POST", payload),
     balance: () => request<Record<string, LeaveBalance>>("/leaves/balance"),
-    updateStatus: (
-      id: string,
-      status: "Approved" | "Rejected",
-    ) =>
-      send<LeaveRequest>(
-        `/leaves/${encodeURIComponent(id)}/status`,
-        "PATCH",
-        { status },
-      ),
+    updateStatus: (id: string, status: "Approved" | "Rejected") =>
+      send<LeaveRequest>(`/leaves/${encodeURIComponent(id)}/status`, "PATCH", {
+        status,
+      }),
   },
   assignments: {
     list: (query = "") =>
@@ -547,6 +541,7 @@ export const api = {
   transport: {
     list: (query = "") =>
       request<TransportRoute[]>(`/transport${query ? `?${query}` : ""}`),
+    mine: () => request<TransportRoute[]>("/transport/me"),
     trackingStatus: () =>
       request<{
         providers?: {
@@ -554,7 +549,11 @@ export const api = {
         };
       }>("/transport/tracking/status"),
     sync: (id: string) =>
-      send<TransportRoute>(`/transport/${encodeURIComponent(id)}/sync`, "POST", {}),
+      send<TransportRoute>(
+        `/transport/${encodeURIComponent(id)}/sync`,
+        "POST",
+        {},
+      ),
   },
   events: {
     list: () => request<SchoolEvent[]>("/events"),
@@ -562,8 +561,7 @@ export const api = {
       send<SchoolEvent>("/events", "POST", payload),
     update: (id: string, payload: Partial<SchoolEvent>) =>
       send<SchoolEvent>(`/events/${encodeURIComponent(id)}`, "PUT", payload),
-    remove: (id: string) =>
-      send(`/events/${encodeURIComponent(id)}`, "DELETE"),
+    remove: (id: string) => send(`/events/${encodeURIComponent(id)}`, "DELETE"),
     uploadImage: (form: FormData) =>
       uploadForm<{ url: string }>("/events/upload-image", form),
   },
@@ -590,7 +588,8 @@ export const api = {
       request<PlatformPlan[]>(`/platform/plans${query ? `?${query}` : ""}`),
   },
   schoolSubscription: {
-    me: () => request<SchoolSubscription | null>("/auth/school/me/subscription"),
+    me: () =>
+      request<SchoolSubscription | null>("/auth/school/me/subscription"),
     scheduled: () =>
       request<SchoolSubscription | null>(
         "/auth/school/me/subscription/scheduled",
@@ -602,11 +601,13 @@ export const api = {
       durationPeriods = 1,
       switchMode: "immediate" | "advance" = "immediate",
     ) =>
-      send<SchoolSubscription | { requiresPayment: true; [key: string]: unknown }>(
-        "/auth/school/me/upgrade",
-        "POST",
-        { planId, durationPeriods, switchMode },
-      ),
+      send<
+        SchoolSubscription | { requiresPayment: true; [key: string]: unknown }
+      >("/auth/school/me/upgrade", "POST", {
+        planId,
+        durationPeriods,
+        switchMode,
+      }),
   },
   schoolSubscriptionInvoices: {
     list: (query = "") =>
@@ -685,7 +686,9 @@ export const api = {
   },
   examMasters: {
     list: (kind: string) =>
-      request<Record<string, unknown>[]>(`/exam-masters/${encodeURIComponent(kind)}`),
+      request<Record<string, unknown>[]>(
+        `/exam-masters/${encodeURIComponent(kind)}`,
+      ),
     create: (kind: string, payload: Record<string, unknown>) =>
       send<Record<string, unknown>>(
         `/exam-masters/${encodeURIComponent(kind)}`,

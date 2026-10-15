@@ -57,14 +57,17 @@ function normalizeNotice(notice: Notice): Notice {
 }
 
 function noticeAudience(notice: Notice) {
+  if (notice.classTags?.length) return notice.classTags.join(", ");
   const audience = notice.audience || [];
   if (audience.includes("all")) return "Everyone";
-  return audience
-    .map(
-      (role) =>
-        audiences.find((option) => option.value === role)?.label || role,
-    )
-    .join(", ") || "Everyone";
+  return (
+    audience
+      .map(
+        (role) =>
+          audiences.find((option) => option.value === role)?.label || role,
+      )
+      .join(", ") || "Everyone"
+  );
 }
 
 function formatDate(value?: string) {
@@ -80,7 +83,8 @@ function formatDate(value?: string) {
 }
 
 export default function NoticesScreen() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const isStudent = user?.role === "student";
   const canPublish = can("notices:publish");
   const [items, setItems] = useState<Notice[]>([]);
   const [query, setQuery] = useState("");
@@ -174,10 +178,8 @@ export default function NoticesScreen() {
     setFormVisible(true);
   };
 
-  const setField = <K extends keyof NoticeForm>(
-    key: K,
-    value: NoticeForm[K],
-  ) => setForm((previous) => ({ ...previous, [key]: value }));
+  const setField = <K extends keyof NoticeForm>(key: K, value: NoticeForm[K]) =>
+    setForm((previous) => ({ ...previous, [key]: value }));
 
   const save = async () => {
     if (!form.title.trim() || !form.body.trim()) {
@@ -208,9 +210,7 @@ export default function NoticesScreen() {
       const updated = normalizeNotice(response.data);
       setItems((previous) =>
         editing
-          ? previous.map((item) =>
-              item._id === editing._id ? updated : item,
-            )
+          ? previous.map((item) => (item._id === editing._id ? updated : item))
           : [updated, ...previous],
       );
       setFormVisible(false);
@@ -275,10 +275,16 @@ export default function NoticesScreen() {
       >
         <View style={s.heading}>
           <View style={s.headingCopy}>
-            <Text style={s.eyebrow}>SCHOOL COMMUNICATION</Text>
-            <Text style={s.title}>Notice Board</Text>
+            <Text style={s.eyebrow}>
+              {isStudent ? "UPDATES" : "SCHOOL COMMUNICATION"}
+            </Text>
+            <Text style={s.title}>
+              {isStudent ? "Notices" : "Notice Board"}
+            </Text>
             <Text style={s.subtitle}>
-              Circulars and announcements for your school community.
+              {isStudent
+                ? "Announcements from the school office and your teachers."
+                : "Circulars and announcements for your school community."}
             </Text>
           </View>
           {canPublish && (
@@ -295,10 +301,30 @@ export default function NoticesScreen() {
         </View>
 
         <View style={s.stats}>
-          <Stat icon="documents-outline" label="Total notices" value={items.length} color={colors.info} />
-          <Stat icon="pin-outline" label="Pinned" value={pinnedCount} color={colors.amberDark} />
-          <Stat icon="calendar-outline" label="This month" value={monthCount} color={colors.success} />
-          <Stat icon="albums-outline" label="Categories" value={categoryCount} color="#7257C8" />
+          <Stat
+            icon="documents-outline"
+            label="Total notices"
+            value={items.length}
+            color={colors.info}
+          />
+          <Stat
+            icon="pin-outline"
+            label="Pinned"
+            value={pinnedCount}
+            color={colors.amberDark}
+          />
+          <Stat
+            icon="calendar-outline"
+            label="This month"
+            value={monthCount}
+            color={colors.success}
+          />
+          <Stat
+            icon="albums-outline"
+            label="Categories"
+            value={categoryCount}
+            color="#7257C8"
+          />
         </View>
 
         <View style={s.searchBox}>
@@ -412,7 +438,9 @@ export default function NoticesScreen() {
                         onPress={() => void togglePin(item)}
                         style={s.iconButton}
                         accessibilityRole="button"
-                        accessibilityLabel={item.pinned ? "Unpin notice" : "Pin notice"}
+                        accessibilityLabel={
+                          item.pinned ? "Unpin notice" : "Pin notice"
+                        }
                       >
                         <Ionicons
                           name={item.pinned ? "pin" : "pin-outline"}
@@ -460,7 +488,12 @@ export default function NoticesScreen() {
                       {noticeAudience(item)}
                     </Text>
                   </View>
-                  <Text style={s.date}>{formatDate(item.expiryDate || item.createdAt)}</Text>
+                  <Text style={s.date}>
+                    {item.senderName || item.postedBy
+                      ? `${item.senderName || item.postedBy} · `
+                      : ""}
+                    {formatDate(item.createdAt)}
+                  </Text>
                 </View>
               </Card>
             ))}
@@ -468,7 +501,11 @@ export default function NoticesScreen() {
         ) : (
           <View style={s.emptyState}>
             <View style={s.emptyIcon}>
-              <Ionicons name="megaphone-outline" size={27} color={colors.amberDark} />
+              <Ionicons
+                name="megaphone-outline"
+                size={27}
+                color={colors.amberDark}
+              />
             </View>
             <Text style={s.emptyTitle}>
               {query || categoryFilter !== "All"
@@ -577,7 +614,9 @@ export default function NoticesScreen() {
               </View>
               <View style={s.toggleCopy}>
                 <Text style={s.toggleTitle}>Pin this notice</Text>
-                <Text style={s.toggleHint}>Keep it at the top of the board.</Text>
+                <Text style={s.toggleHint}>
+                  Keep it at the top of the board.
+                </Text>
               </View>
             </Pressable>
             <Pressable
@@ -623,7 +662,11 @@ export default function NoticesScreen() {
             <View style={s.actionGrow}>
               <Button
                 title={
-                  saving ? "Saving..." : editing ? "Save changes" : "Publish notice"
+                  saving
+                    ? "Saving..."
+                    : editing
+                      ? "Save changes"
+                      : "Publish notice"
                 }
                 onPress={() => void save()}
                 loading={saving}
@@ -728,7 +771,12 @@ const s = StyleSheet.create({
     letterSpacing: 0.8,
   },
   title: { color: colors.ink, fontSize: 23, fontWeight: "800", marginTop: 4 },
-  modalTitle: { color: colors.ink, fontSize: 19, fontWeight: "800", marginTop: 4 },
+  modalTitle: {
+    color: colors.ink,
+    fontSize: 19,
+    fontWeight: "800",
+    marginTop: 4,
+  },
   subtitle: { color: colors.muted, fontSize: 10, marginTop: 3, lineHeight: 15 },
   addButton: {
     minHeight: 40,
@@ -810,7 +858,13 @@ const s = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 11,
   },
-  noticeTags: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 },
+  noticeTags: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
   categoryTag: { fontSize: 9, fontWeight: "800", textTransform: "uppercase" },
   emergencyTag: {
     paddingHorizontal: 6,
@@ -836,7 +890,12 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  noticeTitle: { color: colors.ink, fontSize: 14, fontWeight: "800", lineHeight: 19 },
+  noticeTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 19,
+  },
   noticeBody: { color: colors.muted, fontSize: 11, lineHeight: 17 },
   noticeFooter: {
     flexDirection: "row",
@@ -932,9 +991,15 @@ const s = StyleSheet.create({
     borderColor: "#F0D1CE",
     backgroundColor: "#FFF8F7",
   },
-  emergencyToggleSelected: { borderColor: colors.alert, backgroundColor: "#FFF1EF" },
+  emergencyToggleSelected: {
+    borderColor: colors.alert,
+    backgroundColor: "#FFF1EF",
+  },
   emergencyTitle: { color: colors.alert, fontSize: 10, fontWeight: "800" },
-  emergencyCheckbox: { borderColor: colors.alert, backgroundColor: colors.alert },
+  emergencyCheckbox: {
+    borderColor: colors.alert,
+    backgroundColor: colors.alert,
+  },
   modalActions: {
     flexDirection: "row",
     alignItems: "center",
