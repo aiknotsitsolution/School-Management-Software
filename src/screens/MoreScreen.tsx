@@ -50,10 +50,26 @@ export default function MoreScreen() {
           can("reports:view") ||
           can("fees:reports") ||
           (isSchoolAdmin && can("fees:read")) ||
-          can("enquiries:write")) && (
+          can("enquiries:write") ||
+          !isSuper) && (
           <View>
             <Text style={s.group}>Quick actions</Text>
             <View style={s.grid}>
+              {!isSuper && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Notifications")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="notifications"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Alerts</Text>
+                </Pressable>
+              )}
               {can("staff:read") && (
                 <Pressable style={s.tile} onPress={() => nav.navigate("Staff")}>
                   <View style={s.icon}>

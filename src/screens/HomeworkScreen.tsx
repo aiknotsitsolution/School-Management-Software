@@ -5,6 +5,7 @@ import {
   Linking,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +29,9 @@ type Homework = Row & {
   section?: string;
   subject?: string;
   dueDate?: string;
+  assignedDate?: string;
+  assignedBy?: string;
+  attachments?: string[];
   maxMarks?: number;
   assignType?: string;
   status?: string;
@@ -42,6 +46,7 @@ type Submission = Row & {
   status?: string;
   marks?: number;
   teacherFeedback?: string;
+  createdAt?: string;
   attachments?: { fileName?: string; fileUrl?: string }[];
 };
 
@@ -63,19 +68,43 @@ const emptyForm: HomeworkForm = {
 };
 
 const idOf = (row: Row) => String(row._id || row.id || "");
+const dateKey = (value: unknown) => {
+  if (!value) return "";
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (name: string) =>
+    parts.find((item) => item.type === name)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
 const dateLabel = (value: unknown) => {
   if (!value) return "No due date";
-  const date = new Date(String(value));
+  const raw = String(value);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const date = dateOnly
+    ? new Date(`${raw}T12:00:00.000Z`)
+    : new Date(raw);
   return Number.isNaN(date.getTime())
-    ? String(value)
-    : date.toLocaleDateString(undefined, {
+    ? raw
+    : date.toLocaleDateString("en-IN", {
         day: "numeric",
         month: "short",
         year: "numeric",
+        timeZone: "Asia/Kolkata",
       });
 };
-const isOverdue = (row: Homework) =>
-  Boolean(row.dueDate && new Date(String(row.dueDate)).getTime() < Date.now());
+const isOverdue = (row: Homework) => {
+  const dueDate = dateKey(row.dueDate);
+  const today = dateKey(new Date());
+  return Boolean(dueDate && dueDate < today);
+};
 
 export default function HomeworkScreen() {
   const { user, can } = useAuth();
@@ -91,10 +120,12 @@ export default function HomeworkScreen() {
   const [scopes, setScopes] = useState<Scope[]>([]);
   const [scope, setScope] = useState<Scope | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"All" | "Upcoming" | "Overdue">("All");
+  const [selectedSubject, setSelectedSubject] = useState("All");
   const [formVisible, setFormVisible] = useState(false);
   const [editing, setEditing] = useState<Homework | null>(null);
   const [form, setForm] = useState<HomeworkForm>(emptyForm);
@@ -106,8 +137,9 @@ export default function HomeworkScreen() {
   const [answerFile, setAnswerFile] = useState<Picked | null>(null);
   const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
     setError("");
     try {
       const queryString = !isStudent && scope
@@ -132,6 +164,7 @@ export default function HomeworkScreen() {
       setError(err instanceof Error ? err.message : "Unable to load homework.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [canReview, isStudent, scope]);
 
@@ -196,16 +229,66 @@ export default function HomeworkScreen() {
     return map;
   }, [mySubmissions]);
 
+  const subjects = useMemo(
+    () =>
+      [...new Set(homework.map((item) => String(item.subject || "").trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b)),
+    [homework],
+  );
+
+  const studentProgress = useMemo(() => {
+    const reviewed = homework.filter(
+      (item) =>
+        currentSubmissionByHomework.get(idOf(item))?.status === "Reviewed",
+    );
+    const submitted = homework.filter((item) =>
+      currentSubmissionByHomework.has(idOf(item)),
+    ).length;
+    const graded = reviewed.filter((item) => {
+      const marks = currentSubmissionByHomework.get(idOf(item))?.marks;
+      return marks != null && item.maxMarks;
+    });
+    const average = graded.length
+      ? Math.round(
+          graded.reduce((total, item) => {
+            const marks = currentSubmissionByHomework.get(idOf(item))?.marks || 0;
+            return total + (marks / (item.maxMarks || 1)) * 100;
+          }, 0) / graded.length,
+        )
+      : null;
+    return { submitted, reviewed: reviewed.length, average };
+  }, [currentSubmissionByHomework, homework]);
+
+  const subjectProgress = useMemo(() => {
+    const totals = new Map<string, { total: number; submitted: number }>();
+    homework.forEach((item) => {
+      const subject = String(item.subject || "General");
+      const current = totals.get(subject) || { total: 0, submitted: 0 };
+      current.total += 1;
+      if (currentSubmissionByHomework.has(idOf(item))) current.submitted += 1;
+      totals.set(subject, current);
+    });
+    return [...totals.entries()]
+      .map(([subject, counts]) => ({
+        subject,
+        ...counts,
+        percentage: Math.round((counts.submitted / counts.total) * 100),
+      }))
+      .sort((a, b) => a.percentage - b.percentage);
+  }, [currentSubmissionByHomework, homework]);
+
   const visibleHomework = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return homework.filter((item) => {
+      const matchesSubject =
+        selectedSubject === "All" || String(item.subject || "").trim() === selectedSubject;
       const matchesQuery = !normalized ||
         `${item.title || ""} ${item.subject || ""} ${item.description || ""}`.toLowerCase().includes(normalized);
       const overdue = isOverdue(item);
-      return matchesQuery &&
+      return matchesSubject && matchesQuery &&
         (filter === "All" || (filter === "Overdue" ? overdue : !overdue));
     });
-  }, [filter, homework, query]);
+  }, [filter, homework, query, selectedSubject]);
 
   const openCreate = () => {
     setEditing(null);
@@ -348,7 +431,17 @@ export default function HomeworkScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void load(true)}
+            tintColor={colors.ink}
+          />
+        }
+      >
         <View style={styles.heading}>
           <View style={styles.headingCopy}>
             <Text style={styles.title}>{isStudent ? "My Homework" : "Homework"}</Text>
@@ -363,6 +456,66 @@ export default function HomeworkScreen() {
             </Pressable>
           ) : null}
         </View>
+
+        {isStudent ? (
+          <>
+            <View style={styles.studentStats}>
+              <Card style={styles.studentStat}>
+                <Text style={styles.studentStatValue}>{homework.length}</Text>
+                <Text style={styles.studentStatLabel}>Assignments</Text>
+              </Card>
+              <Card style={styles.studentStat}>
+                <Text style={[styles.studentStatValue, { color: colors.info }]}>
+                  {studentProgress.submitted}
+                </Text>
+                <Text style={styles.studentStatLabel}>Submitted</Text>
+              </Card>
+              <Card style={styles.studentStat}>
+                <Text style={[styles.studentStatValue, { color: colors.success }]}>
+                  {studentProgress.reviewed}
+                </Text>
+                <Text style={styles.studentStatLabel}>
+                  {studentProgress.average == null
+                    ? "Reviewed"
+                    : `Reviewed · avg ${studentProgress.average}%`}
+                </Text>
+              </Card>
+            </View>
+            {subjectProgress.length ? (
+              <Card style={styles.progressCard}>
+                <Text style={styles.progressTitle}>Completion by Subject</Text>
+                <Text style={styles.progressSubtitle}>
+                  Assignments submitted, starting with subjects that need attention
+                </Text>
+                {subjectProgress.map((item) => (
+                  <View key={item.subject} style={styles.subjectProgressRow}>
+                    <View style={styles.subjectProgressHeading}>
+                      <Text numberOfLines={1} style={styles.subjectProgressName}>
+                        {item.subject}
+                      </Text>
+                      <Text style={styles.subjectProgressCount}>
+                        {item.submitted}/{item.total} · {item.percentage}%
+                      </Text>
+                    </View>
+                    <View style={styles.progressTrack}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          { width: `${item.percentage}%` },
+                          item.percentage >= 75
+                            ? styles.progressGood
+                            : item.percentage >= 40
+                              ? styles.progressMid
+                              : styles.progressLow,
+                        ]}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </Card>
+            ) : null}
+          </>
+        ) : null}
 
         {canManageStaffWork && (
           <View style={styles.modeTabs}>
@@ -417,6 +570,33 @@ export default function HomeworkScreen() {
 
         <Card style={styles.filterCard}>
           <Input value={query} onChangeText={setQuery} placeholder="Search homework or subject" />
+          {isStudent && subjects.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filters}
+            >
+              {["All", ...subjects].map((item) => (
+                <Pressable
+                  key={item}
+                  style={[
+                    styles.filterChip,
+                    selectedSubject === item && styles.filterChipSelected,
+                  ]}
+                  onPress={() => setSelectedSubject(item)}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      selectedSubject === item && styles.filterTextSelected,
+                    ]}
+                  >
+                    {item === "All" ? "All subjects" : item}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
           <View style={styles.filters}>
             {(["All", "Upcoming", "Overdue"] as const).map((item) => (
               <Pressable
@@ -442,6 +622,13 @@ export default function HomeworkScreen() {
           const overdue = isOverdue(item);
           const status = String(own?.status || "");
           const locked = status === "Reviewed";
+          const statusLabel = own
+            ? status === "Reviewed"
+              ? `Reviewed${own.marks != null ? ` · ${own.marks}/${item.maxMarks ?? 10}` : ""}`
+              : status || "Submitted"
+            : overdue
+              ? "Overdue"
+              : "Pending";
           return (
             <Card key={id || String(item.title)} style={styles.homeworkCard}>
               <View style={styles.cardTop}>
@@ -449,15 +636,37 @@ export default function HomeworkScreen() {
                   <Text style={styles.homeworkTitle}>{item.title || "Untitled homework"}</Text>
                   <Text style={styles.subject}>{item.subject || "General"} · Class {item.class || "—"}{item.section ? `-${item.section}` : ""}</Text>
                 </View>
-                <View style={[styles.statusBadge, overdue ? styles.overdueBadge : styles.upcomingBadge]}>
-                  <Text style={[styles.statusText, overdue ? styles.overdueText : styles.upcomingText]}>
-                    {overdue ? "Overdue" : status || "Upcoming"}
+                <View
+                  style={[
+                    styles.statusBadge,
+                    own?.status === "Reviewed"
+                      ? styles.reviewedBadge
+                      : overdue && !own
+                        ? styles.overdueBadge
+                        : styles.upcomingBadge,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      own?.status === "Reviewed"
+                        ? styles.reviewedText
+                        : overdue && !own
+                          ? styles.overdueText
+                          : styles.upcomingText,
+                    ]}
+                  >
+                    {statusLabel}
                   </Text>
                 </View>
               </View>
               {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
               <View style={styles.metadata}>
                 <Ionicons name="calendar-outline" size={15} color={colors.muted} />
+                {item.assignedDate ? (
+                  <Text style={styles.metaText}>Assigned {dateLabel(item.assignedDate)}</Text>
+                ) : null}
+                {item.assignedDate ? <Text style={styles.metaDot}>·</Text> : null}
                 <Text style={styles.metaText}>Due {dateLabel(item.dueDate)}</Text>
                 {item.maxMarks != null ? (
                   <>
@@ -466,10 +675,60 @@ export default function HomeworkScreen() {
                   </>
                 ) : null}
               </View>
+              {item.assignedBy ? (
+                <Text style={styles.metaText}>Assigned by {item.assignedBy}</Text>
+              ) : null}
+              {item.attachments?.map((attachment, attachmentIndex) => (
+                <Pressable
+                  key={`${attachment}-${attachmentIndex}`}
+                  style={styles.fileLink}
+                  onPress={() => {
+                    void Linking.openURL(attachment).catch((openError: unknown) =>
+                      Alert.alert(
+                        "Could not open attachment",
+                        openError instanceof Error
+                          ? openError.message
+                          : "Please try again.",
+                      ),
+                    );
+                  }}
+                >
+                  <Ionicons name="document-outline" size={17} color={colors.info} />
+                  <Text numberOfLines={1} style={styles.fileName}>
+                    Open assignment attachment
+                  </Text>
+                </Pressable>
+              ))}
               {isStudent && own ? (
                 <View style={styles.submissionStatus}>
-                  <Text style={styles.submissionTitle}>Submission: {status || "Submitted"}</Text>
+                  <Text style={styles.submissionTitle}>
+                    Submitted{own.createdAt ? ` ${dateLabel(own.createdAt)}` : ""}
+                  </Text>
+                  {own.content ? <Text style={styles.answerText}>{own.content}</Text> : null}
                   {own.marks != null ? <Text style={styles.metaText}>Marks: {own.marks}{item.maxMarks ? ` / ${item.maxMarks}` : ""}</Text> : null}
+                  {own.attachments?.map((attachment, attachmentIndex) => (
+                    <Pressable
+                      key={`${attachment.fileUrl || attachment.fileName}-${attachmentIndex}`}
+                      style={styles.fileLink}
+                      onPress={() => {
+                        if (!attachment.fileUrl) return;
+                        void Linking.openURL(attachment.fileUrl).catch(
+                          (openError: unknown) =>
+                            Alert.alert(
+                              "Could not open attachment",
+                              openError instanceof Error
+                                ? openError.message
+                                : "Please try again.",
+                            ),
+                        );
+                      }}
+                    >
+                      <Ionicons name="document-outline" size={17} color={colors.info} />
+                      <Text numberOfLines={1} style={styles.fileName}>
+                        {attachment.fileName || "Open submitted file"}
+                      </Text>
+                    </Pressable>
+                  ))}
                   {own.teacherFeedback ? <Text style={styles.feedback}>{own.teacherFeedback}</Text> : null}
                 </View>
               ) : null}
@@ -488,7 +747,7 @@ export default function HomeworkScreen() {
                   </Text> : null}
                 </View>
               ) : null}
-              {isStudent && !locked ? (
+              {isStudent && !locked && (!overdue || own) ? (
                 <Pressable style={styles.submitButton} onPress={() => startAnswer(item)}>
                   <Text style={styles.submitButtonText}>{own ? "Update submission" : "Submit homework"}</Text>
                   <Ionicons name="arrow-forward" size={17} color="#fff" />
@@ -685,9 +944,27 @@ const styles = StyleSheet.create({
   statusBadge: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5 },
   upcomingBadge: { backgroundColor: "#EAF2FF" },
   overdueBadge: { backgroundColor: "#FFF0EE" },
+  reviewedBadge: { backgroundColor: "#EAF5EE" },
   statusText: { fontSize: 10, fontWeight: "800" },
   upcomingText: { color: colors.info },
   overdueText: { color: colors.alert },
+  reviewedText: { color: colors.success },
+  studentStats: { flexDirection: "row", gap: 8 },
+  studentStat: { flex: 1, padding: 11, minHeight: 75, justifyContent: "center" },
+  studentStatValue: { color: colors.ink, fontSize: 21, fontWeight: "900" },
+  studentStatLabel: { color: colors.muted, fontSize: 10, lineHeight: 14, marginTop: 4 },
+  progressCard: { gap: 10 },
+  progressTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+  progressSubtitle: { color: colors.muted, fontSize: 11, lineHeight: 15, marginTop: -5 },
+  subjectProgressRow: { gap: 5 },
+  subjectProgressHeading: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  subjectProgressName: { flex: 1, color: colors.text, fontSize: 11, fontWeight: "700" },
+  subjectProgressCount: { color: colors.muted, fontSize: 10 },
+  progressTrack: { height: 6, overflow: "hidden", borderRadius: 5, backgroundColor: "#EEF0F3" },
+  progressFill: { height: "100%", borderRadius: 5 },
+  progressGood: { backgroundColor: colors.success },
+  progressMid: { backgroundColor: colors.amber },
+  progressLow: { backgroundColor: colors.info },
   description: { color: colors.text, fontSize: 13, lineHeight: 19 },
   metadata: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { color: colors.muted, fontSize: 12 },

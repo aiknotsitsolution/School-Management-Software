@@ -50,10 +50,7 @@ import AcademicSessionsScreen from "./src/screens/AcademicSessionsScreen";
 import RolloverScreen from "./src/screens/RolloverScreen";
 import InventoryScreen from "./src/screens/InventoryScreen";
 import HostelScreen from "./src/screens/HostelScreen";
-import {
-  NotificationsProvider,
-  useNotifications,
-} from "./src/context/NotificationsContext";
+import { NotificationsProvider } from "./src/context/NotificationsContext";
 import BusTrackingScreen from "./src/screens/BusTrackingScreen";
 import IdCardScreen from "./src/screens/IdCardScreen";
 import UploadDocumentScreen from "./src/screens/UploadDocumentScreen";
@@ -110,6 +107,7 @@ export type RootStackParams = {
   ManageSchool: undefined;
   Subscription: undefined;
   Homework: undefined;
+  Notifications: undefined;
   Leave: undefined;
   Payroll: undefined;
   OnlinePayment: undefined;
@@ -129,7 +127,8 @@ const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   Staff: "people",
   Students: "people",
   Notices: "megaphone",
-  Alerts: "notifications",
+  Homework: "document-text-outline",
+  Notifications: "notifications-outline",
   "Users & Access": "people",
   More: "apps",
   Profile: "person",
@@ -163,7 +162,6 @@ function PlatformTabs() {
 function SchoolTabs() {
   const { can } = useAuth();
   const { user } = useAuth();
-  const { unread } = useNotifications();
   const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
   return (
     <Tab.Navigator
@@ -189,6 +187,13 @@ function SchoolTabs() {
           name="My Timetable"
           component={TimetableScreen}
           options={{ title: "Timetable" }}
+        />
+      )}
+      {user?.role === "student" && (
+        <Tab.Screen
+          name="Homework"
+          component={HomeworkScreen}
+          options={{ title: "Homework" }}
         />
       )}
       {isSchoolAdmin ? (
@@ -220,13 +225,7 @@ function SchoolTabs() {
           component={UsersAccessScreen}
           options={{ title: "Users & Access" }}
         />
-      ) : (
-        <Tab.Screen
-          name="Alerts"
-          component={NotificationsScreen}
-          options={{ tabBarBadge: unread > 0 ? unread : undefined }}
-        />
-      )}
+      ) : null}
       <Tab.Screen name="More" component={MoreScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
@@ -444,6 +443,11 @@ function Root() {
         name="Homework"
         component={HomeworkScreen}
         options={{ title: "Homework" }}
+      />
+      <Stack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: "Alerts" }}
       />
       <Stack.Screen
         name="Leave"
