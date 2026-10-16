@@ -437,6 +437,14 @@ export const api = {
         request<AttendanceRecord[]>(
           `/staff/attendance${query ? `?${query}` : ""}`,
         ),
+      mark: (payload: {
+        date: string;
+        status: string;
+        checkIn?: string;
+        checkOut?: string;
+        note?: string;
+      }) =>
+        send<AttendanceRecord>("/staff/attendance", "POST", payload),
     },
   },
   payroll: {
@@ -543,6 +551,18 @@ export const api = {
     list: (query = "") =>
       request<TransportRoute[]>(`/transport${query ? `?${query}` : ""}`),
     mine: () => request<TransportRoute[]>("/transport/me"),
+    assign: (id: string, studentId: string) =>
+      send<TransportRoute>(
+        `/transport/${encodeURIComponent(id)}/assign`,
+        "PATCH",
+        { studentId },
+      ),
+    unassign: (id: string, studentId: string) =>
+      send<TransportRoute>(
+        `/transport/${encodeURIComponent(id)}/unassign`,
+        "PATCH",
+        { studentId },
+      ),
     create: (payload: Partial<TransportRoute>) =>
       send<TransportRoute>("/transport", "POST", payload),
     update: (id: string, payload: Partial<TransportRoute>) =>

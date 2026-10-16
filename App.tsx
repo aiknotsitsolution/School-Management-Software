@@ -56,6 +56,8 @@ import HostelScreen from "./src/screens/HostelScreen";
 import { NotificationsProvider } from "./src/context/NotificationsContext";
 import BusTrackingScreen from "./src/screens/BusTrackingScreen";
 import BusRoutesScreen from "./src/screens/BusRoutesScreen";
+import AllocationsScreen from "./src/screens/AllocationsScreen";
+import MyAttendanceScreen from "./src/screens/MyAttendanceScreen";
 import IdCardScreen from "./src/screens/IdCardScreen";
 import UploadDocumentScreen from "./src/screens/UploadDocumentScreen";
 import StudentDocumentsScreen from "./src/screens/StudentDocumentsScreen";
@@ -102,6 +104,8 @@ export type RootStackParams = {
   Inventory: undefined;
   Hostel: undefined;
   BusTracking: undefined;
+  Allocations: undefined;
+  MyAttendance: undefined;
   IdCard: undefined;
   UploadDocument: undefined;
   StudentDocuments: undefined;
@@ -447,6 +451,16 @@ function Root() {
         options={{
           title: user.role === "student" ? "My School Bus" : "Bus Tracking",
         }}
+      />
+      <Stack.Screen
+        name="Allocations"
+        component={AllocationsScreen}
+        options={{ title: "Student Allocations" }}
+      />
+      <Stack.Screen
+        name="MyAttendance"
+        component={MyAttendanceScreen}
+        options={{ title: "My Attendance" }}
       />
       <Stack.Screen
         name="IdCard"

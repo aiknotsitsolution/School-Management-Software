@@ -14,6 +14,9 @@ export default function MoreScreen() {
   const isSuper = user?.role === "super_admin";
   const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
   const isStudent = user?.role === "student";
+  const isStaff = user?.role === "staff" || user?.role === "teacher";
+  const isTransportCoordinator =
+    user?.role === "staff" && user.designation === "transport";
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.paper }}
@@ -55,6 +58,21 @@ export default function MoreScreen() {
           <View>
             <Text style={s.group}>Quick actions</Text>
             <View style={s.grid}>
+              {isStaff && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("MyAttendance")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>My Attendance</Text>
+                </Pressable>
+              )}
               {!isSuper && (
                 <Pressable
                   style={s.tile}
@@ -140,6 +158,21 @@ export default function MoreScreen() {
                   <Text style={s.label}>
                     {isStudent ? "My School Bus" : "Bus Tracking"}
                   </Text>
+                </Pressable>
+              )}
+              {can("transport:update") && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("Allocations")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="people-circle-outline"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Student Allocations</Text>
                 </Pressable>
               )}
               {(can("students:read") || user?.role === "student") && (
@@ -499,7 +532,11 @@ export default function MoreScreen() {
                     />
                   </View>
                   <Text style={s.label}>
-                    {isStudent ? "Leave Request" : "Leave Management"}
+                    {isStudent
+                      ? "Leave Request"
+                      : isTransportCoordinator
+                        ? "My Leave"
+                        : "Leave Management"}
                   </Text>
                 </Pressable>
               )}

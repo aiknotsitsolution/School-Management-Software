@@ -293,6 +293,9 @@ export interface AttendanceRecord {
   date?: string;
   status: string;
   remarks?: string;
+  checkIn?: string | null;
+  checkOut?: string | null;
+  note?: string | null;
 }
 export interface AttendanceClassSummary {
   class?: string;
@@ -437,6 +440,12 @@ export interface TransportRoute {
   driverContact?: string;
   stops?: (TransportStop | string)[];
   assignedStudents?: unknown[];
+  roster?: {
+    admissionNo: string;
+    name?: string | null;
+    class?: string;
+    section?: string;
+  }[];
   currentLocation?: {
     lat?: number | string;
     lng?: number | string;

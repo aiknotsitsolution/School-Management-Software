@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import { Button, Card, Input } from "../components/UI";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
@@ -102,6 +103,9 @@ const statusColor = (status: string) => {
 export default function LeaveScreen() {
   const { user, can } = useAuth();
   const isStudent = user?.role === "student";
+  const isTransportCoordinator =
+    user?.role === "staff" && user.designation === "transport";
+  const navigation = useNavigation();
   const canApply = can("leaves:apply");
   const canApprove = can("leaves:approve");
   const canSeeBalance = ["teacher", "staff"].includes(user?.role || "");
@@ -122,6 +126,12 @@ export default function LeaveScreen() {
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState("");
 
+  useEffect(() => {
+    navigation.setOptions({
+      title: isTransportCoordinator ? "My Leave" : "Leave Management",
+    });
+  }, [isTransportCoordinator, navigation]);
+
   const loadRequests = async (refresh = false) => {
     if (refresh) setRefreshing(true);
     else setLoading(true);
@@ -129,7 +139,7 @@ export default function LeaveScreen() {
     try {
       const [leaveResult, staffResult] = await Promise.allSettled([
         api.leaves.list("limit=500"),
-        can("staff:read")
+        can("staff:read") && !isTransportCoordinator
           ? api.staff.list("limit=500")
           : Promise.resolve({ data: [] as StaffRecord[] }),
       ]);
@@ -174,7 +184,7 @@ export default function LeaveScreen() {
 
   useEffect(() => {
     void loadRequests();
-  }, []);
+  }, [isTransportCoordinator]);
 
   useEffect(() => {
     if (tab === "balance" && canSeeBalance) void loadBalance();
@@ -311,13 +321,21 @@ export default function LeaveScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={s.eyebrow}>
-              {isStudent ? "SCHOOL SERVICES" : "HUMAN RESOURCES"}
+              {isStudent
+                ? "SCHOOL SERVICES"
+                : isTransportCoordinator
+                  ? "STAFF SELF-SERVICE"
+                  : "HUMAN RESOURCES"}
             </Text>
             <Text style={s.title}>
-              {isStudent ? "Leave Request" : "Leave Management"}
+              {isStudent
+                ? "Leave Request"
+                : isTransportCoordinator
+                  ? "My Leave"
+                  : "Leave Management"}
             </Text>
             <Text style={s.subtitle}>
-              {isStudent
+              {isStudent || isTransportCoordinator
                 ? "Apply for leave and track your requests."
                 : "Apply for leave and track request status."}
             </Text>
@@ -359,7 +377,9 @@ export default function LeaveScreen() {
         {tab === "requests" ? (
           <Card style={{ gap: 12 }}>
             <Text style={s.sectionTitle}>
-              {isStudent ? "My Leave Requests" : "Leave Requests"}
+              {isStudent || isTransportCoordinator
+                ? "My Leave Requests"
+                : "Leave Requests"}
             </Text>
             {canApprove && (
               <Text style={s.helper}>
