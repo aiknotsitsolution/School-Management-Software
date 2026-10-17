@@ -208,6 +208,7 @@ export default function StudentPerformanceScreen() {
   const [attendance, setAttendance] = useState<AttendanceEntry[]>([]);
   const [examNames, setExamNames] = useState<string[]>([]);
   const [examName, setExamName] = useState("");
+  const [summaryAttempt, setSummaryAttempt] = useState(0);
   const [summary, setSummary] = useState<PerformanceSummary | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -375,7 +376,7 @@ export default function StudentPerformanceScreen() {
       .finally(() => {
         if (request === summaryRequest.current) setSummaryLoading(false);
       });
-  }, [examName, scope]);
+  }, [examName, scope, summaryAttempt]);
 
   const studentsById = useMemo(() => {
     const result = new Map<string, string>();
@@ -648,31 +649,9 @@ export default function StudentPerformanceScreen() {
                   <View style={styles.errorInline}>
                     <Text style={styles.errorText}>{summaryError}</Text>
                     <Pressable
-                      onPress={() => {
-                        if (scope && examName) {
-                          const query = new URLSearchParams({
-                            class: scope.class,
-                            ...(scope.section
-                              ? { section: scope.section }
-                              : {}),
-                            examName,
-                          }).toString();
-                          setSummaryLoading(true);
-                          setSummaryError("");
-                          get<PerformanceSummary>(
-                            `/marks/class-summary?${query}`,
-                          )
-                            .then((response) => setSummary(response.data))
-                            .catch((loadError: unknown) =>
-                              setSummaryError(
-                                loadError instanceof Error
-                                  ? loadError.message
-                                  : "Could not load academic results.",
-                              ),
-                            )
-                            .finally(() => setSummaryLoading(false));
-                        }
-                      }}
+                      onPress={() =>
+                        setSummaryAttempt((attempt) => attempt + 1)
+                      }
                       accessibilityRole="button"
                     >
                       <Text style={styles.retryText}>Retry</Text>
