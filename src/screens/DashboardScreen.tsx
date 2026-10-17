@@ -28,6 +28,10 @@ import type {
 import { TrendChart, Point } from "../components/Charts";
 import PlatformDashboardScreen from "./PlatformDashboardScreen";
 import SchoolAdminDashboardScreen from "./SchoolAdminDashboardScreen";
+import ReceptionDashboardScreen from "./ReceptionDashboardScreen";
+import CounsellorDashboardScreen from "./CounsellorDashboardScreen";
+import AccountantDashboardScreen from "./AccountantDashboardScreen";
+import TeacherDashboardScreen from "./TeacherDashboardScreen";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -35,7 +39,17 @@ export default function DashboardScreen() {
   if (user?.role === "school_admin" || user?.role === "admin") {
     return <SchoolAdminDashboardScreen />;
   }
+  if (user?.role === "teacher") return <TeacherDashboardScreen />;
   if (user?.role === "student") return <StudentDashboardScreen />;
+  if (user?.role === "staff" && user.designation === "receptionist") {
+    return <ReceptionDashboardScreen />;
+  }
+  if (user?.role === "staff" && user.designation === "admission_counsellor") {
+    return <CounsellorDashboardScreen />;
+  }
+  if (user?.role === "staff" && user.designation === "accountant") {
+    return <AccountantDashboardScreen />;
+  }
   return <SchoolDashboardScreen />;
 }
 

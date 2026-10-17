@@ -47,7 +47,7 @@ import type {
 
 const localApiUrl =
   Platform.OS === "android"
-    ? "http://192.168.1.12:5000/api"
+    ? "http://192.168.1.15:5000/api"
     : "http://localhost:5000/api";
 export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
@@ -214,6 +214,21 @@ export const api = {
         active: number;
         byClass?: { _id?: string; count?: number }[];
       }>("/students/stats/summary"),
+    counsellorStats: () =>
+      request<{
+        total: number;
+        incomplete: number;
+        complete: number;
+        recent: {
+          _id: string;
+          name?: string;
+          admissionNo?: string;
+          class?: string;
+          section?: string;
+          profileStatus?: "complete" | "incomplete";
+          createdAt?: string;
+        }[];
+      }>("/students/counsellor/stats"),
     pendingRegistrations: (p?: string) =>
       request<Record<string, unknown>[]>(
         `/students/pending-registrations${q(p)}`,
@@ -245,6 +260,8 @@ export const api = {
         request<FeeStructure[]>(`/fees/structure${query ? `?${query}` : ""}`),
       create: (payload: Partial<FeeStructure>) =>
         send<FeeStructure>("/fees/structure", "POST", payload),
+      remove: (id: string) =>
+        send(`/fees/structure/${encodeURIComponent(id)}`, "DELETE"),
     },
     invoices: {
       list: (query = "") =>
@@ -257,6 +274,7 @@ export const api = {
         invoiceId: string;
         amount: number;
         mode: string;
+        receiptNo?: string;
         transactionId?: string;
         chequeNo?: string;
         chequeDate?: string;
@@ -526,6 +544,7 @@ export const api = {
       }>("/assignments/me"),
   },
   homework: {
+    mine: () => request<Record<string, unknown>[]>("/homework/mine"),
     list: (query = "") =>
       request<Record<string, unknown>[]>(
         `/homework${query ? `?${query}` : ""}`,

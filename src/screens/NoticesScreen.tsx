@@ -85,7 +85,8 @@ function formatDate(value?: string) {
 export default function NoticesScreen() {
   const { can, user } = useAuth();
   const isStudent = user?.role === "student";
-  const canPublish = can("notices:publish");
+  const isTeacher = user?.role === "teacher";
+  const canPublish = can("notices:publish") && !isTeacher;
   const [items, setItems] = useState<Notice[]>([]);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -279,11 +280,13 @@ export default function NoticesScreen() {
               {isStudent ? "UPDATES" : "SCHOOL COMMUNICATION"}
             </Text>
             <Text style={s.title}>
-              {isStudent ? "Notices" : "Notice Board"}
+              {isStudent ? "Notices" : isTeacher ? "Notice" : "Notice Board"}
             </Text>
             <Text style={s.subtitle}>
               {isStudent
                 ? "Announcements from the school office and your teachers."
+                : isTeacher
+                  ? "Official circulars and announcements for students, parents and staff."
                 : "Circulars and announcements for your school community."}
             </Text>
           </View>

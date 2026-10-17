@@ -30,9 +30,12 @@ import ModuleListScreen from "./src/screens/ModuleListScreen";
 import ModuleDetailScreen from "./src/screens/ModuleDetailScreen";
 import FormScreen from "./src/screens/FormScreen";
 import MarkAttendanceScreen from "./src/screens/MarkAttendanceScreen";
+import TeacherStudentAttendanceScreen from "./src/screens/TeacherStudentAttendanceScreen";
 import StudentAttendanceScreen from "./src/screens/StudentAttendanceScreen";
 import StudentAchievementsScreen from "./src/screens/StudentAchievementsScreen";
 import ExaminationScreen from "./src/screens/ExaminationScreen";
+import TeacherExamsScreen from "./src/screens/TeacherExamsScreen";
+import StudentPerformanceScreen from "./src/screens/StudentPerformanceScreen";
 import StudentExamsScreen from "./src/screens/StudentExamsScreen";
 import EditRecordScreen from "./src/screens/EditRecordScreen";
 import MarksEntryScreen from "./src/screens/MarksEntryScreen";
@@ -63,6 +66,9 @@ import UploadDocumentScreen from "./src/screens/UploadDocumentScreen";
 import StudentDocumentsScreen from "./src/screens/StudentDocumentsScreen";
 import StaffScreen from "./src/screens/StaffScreen";
 import FeesCollectionScreen from "./src/screens/FeesCollectionScreen";
+import AccountantFeesCollectionScreen from "./src/screens/AccountantFeesCollectionScreen";
+import MyWorkScreen from "./src/screens/MyWorkScreen";
+import MyClassScreen from "./src/screens/MyClassScreen";
 import StudentFeesScreen from "./src/screens/StudentFeesScreen";
 import HomeworkScreen from "./src/screens/HomeworkScreen";
 import LeaveScreen from "./src/screens/LeaveScreen";
@@ -106,6 +112,8 @@ export type RootStackParams = {
   BusTracking: undefined;
   Allocations: undefined;
   MyAttendance: undefined;
+  MyClass: undefined;
+  TeacherStudentAttendance: undefined;
   IdCard: undefined;
   UploadDocument: undefined;
   StudentDocuments: undefined;
@@ -114,6 +122,8 @@ export type RootStackParams = {
   AttendanceHistory: undefined;
   Achievements: undefined;
   Examination: undefined;
+  TeacherExams: undefined;
+  StudentPerformance: undefined;
   StudentExams: undefined;
   Staff: undefined;
   FeesCollection: undefined;
@@ -137,6 +147,12 @@ const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   "Bus Routes": "map-outline",
   Attendance: "calendar-outline",
   "My Timetable": "time-outline",
+  "My Attendance": "calendar-outline",
+  Enquiries: "clipboard-outline",
+  Admissions: "clipboard-outline",
+  "Add Student": "person-add-outline",
+  Fees: "wallet-outline",
+  Collection: "receipt-outline",
   Schools: "business",
   Users: "people-circle",
   "Admission Enquiry": "person-add",
@@ -144,6 +160,7 @@ const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
   Students: "people",
   Notices: "megaphone",
   Homework: "document-text-outline",
+  "My Work": "briefcase-outline",
   Notifications: "notifications-outline",
   "Users & Access": "people",
   More: "apps",
@@ -181,6 +198,12 @@ function SchoolTabs() {
   const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
   const isTransportCoordinator =
     user?.role === "staff" && user.designation === "transport";
+  const isReceptionist =
+    user?.role === "staff" && user.designation === "receptionist";
+  const isAdmissionCounsellor =
+    user?.role === "staff" && user.designation === "admission_counsellor";
+  const isAccountant =
+    user?.role === "staff" && user.designation === "accountant";
   return (
     <Tab.Navigator
       initialRouteName={isTransportCoordinator ? "Bus Tracking" : "Dashboard"}
@@ -200,6 +223,20 @@ function SchoolTabs() {
         }
         options={{ title: isTransportCoordinator ? "Transport" : "Dashboard" }}
       />
+      {user?.role === "teacher" && (
+        <Tab.Screen
+          name="My Work"
+          component={MyWorkScreen}
+          options={{ title: "My Work" }}
+        />
+      )}
+      {user?.role === "teacher" && (
+        <Tab.Screen
+          name="My Attendance"
+          component={MyAttendanceScreen}
+          options={{ title: "My Attendance" }}
+        />
+      )}
       {isTransportCoordinator && (
         <Tab.Screen
           name="Bus Tracking"
@@ -243,12 +280,58 @@ function SchoolTabs() {
             options={{ title: "Admissions" }}
           />
         )
+      ) : isReceptionist ? (
+        can("admissions:read") && (
+          <Tab.Screen
+            name="Enquiries"
+            component={AdmissionEnquiryScreen}
+            options={{ title: "Enquiries" }}
+          />
+        )
+      ) : isAdmissionCounsellor ? (
+        can("admissions:read") && (
+          <Tab.Screen
+            name="Admissions"
+            component={AdmissionEnquiryScreen}
+            options={{ title: "Admission Enquiry" }}
+          />
+        )
       ) : (
         <>
-          {!isTransportCoordinator && can("students:read") && (
-            <Tab.Screen name="Students" component={StudentsScreen} />
-          )}
+          {!isTransportCoordinator &&
+            !isAccountant &&
+            can("students:read") && (
+              <Tab.Screen name="Students" component={StudentsScreen} />
+            )}
         </>
+      )}
+      {isAdmissionCounsellor && can("students:read") && (
+        <Tab.Screen
+          name="Students"
+          component={StudentsScreen}
+          options={{ title: "Students" }}
+        />
+      )}
+      {isAdmissionCounsellor && can("students:write") && (
+        <Tab.Screen
+          name="Add Student"
+          component={StudentOnboardScreen}
+          options={{ title: "Add Student" }}
+        />
+      )}
+      {isAccountant && can("fees:read") && (
+        <Tab.Screen
+          name="Fees"
+          component={FeesCollectionScreen}
+          options={{ title: "Fees" }}
+        />
+      )}
+      {isAccountant && can("fees:read") && (
+        <Tab.Screen
+          name="Collection"
+          component={AccountantFeesCollectionScreen}
+          options={{ title: "Collection" }}
+        />
       )}
       {isSchoolAdmin && can("staff:read") && (
         <Tab.Screen
@@ -312,7 +395,12 @@ function Root() {
         name="NoticeBoard"
         component={NoticesScreen}
         options={{
-          title: user.role === "student" ? "Notices" : "Notice Board",
+          title:
+            user.role === "student"
+              ? "Notices"
+              : user.role === "teacher"
+                ? "Notice"
+                : "Notice Board",
         }}
       />
       <Stack.Screen
@@ -463,6 +551,16 @@ function Root() {
         options={{ title: "My Attendance" }}
       />
       <Stack.Screen
+        name="MyClass"
+        component={MyClassScreen}
+        options={{ title: "My Class" }}
+      />
+      <Stack.Screen
+        name="TeacherStudentAttendance"
+        component={TeacherStudentAttendanceScreen}
+        options={{ title: "Student Attendance" }}
+      />
+      <Stack.Screen
         name="IdCard"
         component={IdCardScreen}
         options={{ title: "ID Card" }}
@@ -502,6 +600,16 @@ function Root() {
         name="Examination"
         component={ExaminationScreen}
         options={{ title: "Examination" }}
+      />
+      <Stack.Screen
+        name="TeacherExams"
+        component={TeacherExamsScreen}
+        options={{ title: "Exam" }}
+      />
+      <Stack.Screen
+        name="StudentPerformance"
+        component={StudentPerformanceScreen}
+        options={{ title: "Student Performance" }}
       />
       <Stack.Screen
         name="StudentExams"

@@ -285,6 +285,8 @@ export interface Student {
   address?: string;
   photoUrl?: string;
   deletedAt?: string | null;
+  profileStatus?: "complete" | "incomplete";
+  createdAt?: string;
 }
 export interface AttendanceRecord {
   _id?: string;
@@ -422,6 +424,7 @@ export interface AdmissionEnquiry {
   status?: string;
   admissionNo?: string;
   followUpDate?: string;
+  visitDate?: string;
   notes?: string;
   createdAt?: string;
 }

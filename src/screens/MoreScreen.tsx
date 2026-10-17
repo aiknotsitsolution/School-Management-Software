@@ -73,6 +73,36 @@ export default function MoreScreen() {
                   <Text style={s.label}>My Attendance</Text>
                 </Pressable>
               )}
+              {user?.role === "teacher" && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("MyClass")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="people-outline"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>My Class</Text>
+                </Pressable>
+              )}
+              {user?.role === "teacher" && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("TeacherStudentAttendance")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Student Attendance</Text>
+                </Pressable>
+              )}
               {!isSuper && (
                 <Pressable
                   style={s.tile}
@@ -205,7 +235,7 @@ export default function MoreScreen() {
                   <Text style={s.label}>My Documents</Text>
                 </Pressable>
               )}
-              {can("timetable:read") && (
+              {(can("timetable:read") || user?.role === "teacher") && (
                 <Pressable
                   style={s.tile}
                   onPress={() => nav.navigate("Timetable")}
@@ -229,6 +259,20 @@ export default function MoreScreen() {
                     />
                   </View>
                   <Text style={s.label}>Exams</Text>
+                </Pressable>
+              ) : user?.role === "teacher" ? (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("TeacherExams")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="clipboard"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Exam</Text>
                 </Pressable>
               ) : can("exams:read") || can("exams:write") ? (
                 <Pressable
@@ -359,6 +403,21 @@ export default function MoreScreen() {
                   </Text>
                 </Pressable>
               )}
+              {user?.role === "teacher" && can("marks:read") && (
+                <Pressable
+                  style={s.tile}
+                  onPress={() => nav.navigate("StudentPerformance")}
+                >
+                  <View style={s.icon}>
+                    <Ionicons
+                      name="stats-chart"
+                      size={22}
+                      color={colors.amberDark}
+                    />
+                  </View>
+                  <Text style={s.label}>Student Performance</Text>
+                </Pressable>
+              )}
               {isStudent && (
                 <Pressable
                   style={s.tile}
@@ -473,7 +532,11 @@ export default function MoreScreen() {
                     />
                   </View>
                   <Text style={s.label}>
-                    {isStudent ? "Notices" : "Notice Board"}
+                    {isStudent
+                      ? "Notices"
+                      : user?.role === "teacher"
+                        ? "Notice"
+                        : "Notice Board"}
                   </Text>
                 </Pressable>
               )}

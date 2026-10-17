@@ -20,13 +20,14 @@ import { api } from "../lib/api";
 import { colors } from "../theme";
 import type {
   FeeInvoice,
+  FeePlan,
   FeePayment,
   FeeReconciliation,
   FeeStructure,
   Student,
 } from "../types";
 
-const TABS = ["Payments", "Invoices", "Structures"] as const;
+const TABS = ["Invoices", "Students", "Fee Structure", "Payments"] as const;
 const MODES = [
   "Cash",
   "Card",
@@ -43,6 +44,7 @@ type PaymentForm = {
   invoiceId: string;
   amount: string;
   mode: (typeof MODES)[number];
+  receiptNo: string;
   transactionId: string;
   chequeNo: string;
   chequeDate: string;
@@ -61,6 +63,7 @@ const emptyPayment = (): PaymentForm => ({
   invoiceId: "",
   amount: "",
   mode: "Cash",
+  receiptNo: "",
   transactionId: "",
   chequeNo: "",
   chequeDate: "",
@@ -100,13 +103,16 @@ const dateLabel = (value?: string) =>
 export default function FeesCollectionScreen() {
   const { user, can } = useAuth();
   const isSchoolAdmin = user?.role === "school_admin" || user?.role === "admin";
+  const isAccountant =
+    user?.role === "staff" && user.designation === "accountant";
   const [students, setStudents] = useState<Student[]>([]);
   const [invoices, setInvoices] = useState<FeeInvoice[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
+  const [plans, setPlans] = useState<FeePlan[]>([]);
   const [structures, setStructures] = useState<FeeStructure[]>([]);
   const [reconciliation, setReconciliation] =
     useState<FeeReconciliation | null>(null);
-  const [tab, setTab] = useState<Tab>("Payments");
+  const [tab, setTab] = useState<Tab>("Invoices");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -119,8 +125,10 @@ export default function FeesCollectionScreen() {
   const [paymentForm, setPaymentForm] = useState<PaymentForm>(emptyPayment);
   const [structureForm, setStructureForm] =
     useState<StructureForm>(emptyStructure);
-  const canCollect = isSchoolAdmin && can("fees:collect");
-  const canManageStructure = isSchoolAdmin && can("fees:structure");
+  const canCollect =
+    (isSchoolAdmin || isAccountant) && can("fees:collect");
+  const canManageStructure =
+    (isSchoolAdmin || isAccountant) && can("fees:structure");
 
   const load = async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -131,6 +139,7 @@ export default function FeesCollectionScreen() {
       api.fees.payments.list("limit=1000"),
       api.fees.structures.list("limit=500"),
       api.fees.reports.reconciliation(),
+      api.fees.plans.list("limit=1000"),
     ]);
     const [
       studentResult,
@@ -138,6 +147,7 @@ export default function FeesCollectionScreen() {
       paymentResult,
       structureResult,
       reconciliationResult,
+      plansResult,
     ] = results;
     if (studentResult.status === "fulfilled")
       setStudents(studentResult.value.data || []);
@@ -152,9 +162,11 @@ export default function FeesCollectionScreen() {
         ? reconciliationResult.value.data
         : null,
     );
-    const failures = results
-      .slice(0, 4)
-      .filter((result) => result.status === "rejected");
+    if (plansResult.status === "fulfilled")
+      setPlans(plansResult.value.data || []);
+    const failures = results.filter(
+      (result) => result.status === "rejected",
+    );
     setError(
       failures.length
         ? "Some fee data could not be loaded. Pull down to retry."
@@ -263,6 +275,54 @@ export default function FeesCollectionScreen() {
         ),
     );
   }, [structures, query]);
+  const studentRows = useMemo(() => {
+    const rows = new Map<
+      string,
+      {
+        studentId: string;
+        planned: number;
+        hasPlan: boolean;
+        invoiced: number;
+        paid: number;
+        className: string;
+      }
+    >();
+    const rowFor = (studentId?: string) => {
+      const id = String(studentId || "");
+      if (!rows.has(id)) {
+        rows.set(id, {
+          studentId: id,
+          planned: 0,
+          hasPlan: false,
+          invoiced: 0,
+          paid: 0,
+          className: "",
+        });
+      }
+      return rows.get(id)!;
+    };
+    plans.forEach((plan) => {
+      const row = rowFor(plan.studentId);
+      row.planned = Number(plan.totalAnnual || 0);
+      row.hasPlan = true;
+      row.className = plan.class || row.className;
+    });
+    invoices.forEach((invoice) => {
+      const row = rowFor(invoice.studentId);
+      row.invoiced += Number(invoice.amount || 0);
+      row.paid += Number(invoice.paidAmount || 0);
+      row.className = row.className || invoice.class || "";
+    });
+    const needle = query.trim().toLowerCase();
+    return [...rows.values()]
+      .map((row) => ({
+        ...row,
+        balance: Math.max(0, row.invoiced - row.paid),
+      }))
+      .filter((row) => row.hasPlan || row.invoiced > 0)
+      .filter((row) => !needle || row.studentId.toLowerCase().includes(needle))
+      .sort((a, b) => b.balance - a.balance);
+  }, [plans, invoices, query]);
 
   const selectedInvoice = invoices.find(
     (invoice) => String(invoice._id) === paymentForm.invoiceId,
@@ -367,12 +427,29 @@ export default function FeesCollectionScreen() {
       );
       return;
     }
+    const receiptNo = paymentForm.receiptNo.trim();
+    const needsReceipt = paymentForm.mode === "Cash" || paymentForm.mode === "Cheque";
+    if (needsReceipt && !receiptNo) {
+      Alert.alert(
+        "Receipt number required",
+        `Enter the receipt number from your receipt book for ${paymentForm.mode} payments.`,
+      );
+      return;
+    }
+    if (receiptNo && !/^[A-Za-z0-9][A-Za-z0-9/_#.-]{2,39}$/.test(receiptNo)) {
+      Alert.alert(
+        "Invalid receipt number",
+        "Use 3–40 characters: letters, digits, and - _ / . # only.",
+      );
+      return;
+    }
     setPaymentBusy(true);
     try {
       await api.fees.payments.create({
         invoiceId: paymentForm.invoiceId,
         amount,
         mode: paymentForm.mode,
+        receiptNo: receiptNo || undefined,
         transactionId: paymentForm.transactionId.trim() || undefined,
         chequeNo:
           paymentForm.mode === "Cheque"
@@ -439,13 +516,42 @@ export default function FeesCollectionScreen() {
     }
   };
 
-  if (!isSchoolAdmin || !can("fees:read")) {
+  const deleteStructure = (structure: FeeStructure) => {
+    Alert.alert(
+      "Remove fee structure?",
+      `${structure.feeType || "Fee"} for Class ${structure.class || "—"} will be removed.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                await api.fees.structures.remove(structure._id);
+                await load(true);
+              } catch (deleteError) {
+                Alert.alert(
+                  "Unable to remove fee structure",
+                  deleteError instanceof Error
+                    ? deleteError.message
+                    : "Please try again.",
+                );
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  if ((!isSchoolAdmin && !isAccountant) || !can("fees:read")) {
     return (
       <View style={s.center}>
         <Ionicons name="lock-closed-outline" size={28} color={colors.muted} />
-        <Text style={s.emptyTitle}>Admin access required</Text>
+        <Text style={s.emptyTitle}>Fee access required</Text>
         <Text style={s.emptyText}>
-          Sign in with a school admin account to view fee collection.
+          Sign in with an authorized school account to view fee collection.
         </Text>
       </View>
     );
@@ -458,7 +564,7 @@ export default function FeesCollectionScreen() {
       <View style={s.hero}>
         <Text style={s.eyebrow}>FINANCE</Text>
         <View style={s.heroLine}>
-          <Text style={s.title}>Fees Collection</Text>
+          <Text style={s.title}>Manage Fees</Text>
           {canCollect && (
             <Pressable
               style={s.heroAction}
@@ -513,7 +619,7 @@ export default function FeesCollectionScreen() {
             </Pressable>
           ))}
         </ScrollView>
-        {tab === "Structures" && canManageStructure && (
+        {tab === "Fee Structure" && canManageStructure && (
           <Pressable
             style={s.addStructure}
             onPress={() => setStructureVisible(true)}
@@ -542,7 +648,9 @@ export default function FeesCollectionScreen() {
           ? `${filteredPayments.length} payments`
           : tab === "Invoices"
             ? `${filteredInvoices.length} invoices`
-            : `${filteredStructures.length} fee structures`}
+            : tab === "Students"
+              ? `${studentRows.length} students`
+              : `${filteredStructures.length} fee structures`}
       </Text>
 
       <ScrollView
@@ -653,7 +761,65 @@ export default function FeesCollectionScreen() {
             <Empty text="No invoices found" />
           ))}
 
-        {tab === "Structures" &&
+        {tab === "Students" &&
+          (studentRows.length ? (
+            studentRows.map((row) => {
+              const student = studentMap.get(row.studentId);
+              return (
+                <Card key={row.studentId} style={s.recordCard}>
+                  <View style={s.recordTop}>
+                    <View style={[s.recordIcon, { backgroundColor: "#EAF0F5" }]}>
+                      <Ionicons
+                        name="person-outline"
+                        size={18}
+                        color={colors.info}
+                      />
+                    </View>
+                    <View style={s.recordIdentity}>
+                      <Text style={s.recordTitle}>
+                        {studentName(student) === "Student"
+                          ? row.studentId || "Student"
+                          : studentName(student)}
+                      </Text>
+                      <Text style={s.recordMeta}>
+                        {student?.admissionNo || row.studentId || "—"} · Class{" "}
+                        {row.className || "—"}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        s.amount,
+                        { color: row.balance > 0 ? colors.alert : colors.success },
+                      ]}
+                    >
+                      {money(row.balance)}
+                    </Text>
+                  </View>
+                  <View style={s.studentFeeGrid}>
+                    <FeeValue
+                      label="Package / year"
+                      value={row.hasPlan ? money(row.planned) : "—"}
+                    />
+                    <FeeValue label="Invoiced" value={money(row.invoiced)} />
+                    <FeeValue
+                      label="Collected"
+                      value={money(row.paid)}
+                      tone={colors.success}
+                    />
+                    <FeeValue
+                      label="Balance"
+                      value={money(row.balance)}
+                      tone={row.balance > 0 ? colors.alert : colors.success}
+                    />
+                  </View>
+                </Card>
+              );
+            })
+          ) : (
+            <Empty text="No fee packages or invoices found" />
+          ))}
+
+        {tab === "Fee Structure" &&
           (filteredStructures.length ? (
             filteredStructures.map((structure) => (
               <Card key={structure._id} style={s.recordCard}>
@@ -683,9 +849,25 @@ export default function FeesCollectionScreen() {
                     {structure.frequency || "One-time"} · Due{" "}
                     {dateLabel(structure.dueDate)}
                   </Text>
-                  <Text style={s.recordStatus}>
-                    {structure.active === false ? "Inactive" : "Active"}
-                  </Text>
+                  <View style={s.structureFooterActions}>
+                    <Text style={s.recordStatus}>
+                      {structure.active === false ? "Inactive" : "Active"}
+                    </Text>
+                    {canManageStructure && (
+                      <Pressable
+                        onPress={() => deleteStructure(structure)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${structure.feeType || "fee"} structure for class ${structure.class || "unknown"}`}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={17}
+                          color={colors.alert}
+                        />
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
               </Card>
             ))
@@ -881,6 +1063,26 @@ export default function FeesCollectionScreen() {
                     />
                   </>
                 )}
+                <Text style={s.fieldLabel}>
+                  Receipt number{" "}
+                  {paymentForm.mode === "Cash" ||
+                  paymentForm.mode === "Cheque"
+                    ? "*"
+                    : "(optional)"}
+                </Text>
+                <Input
+                  value={paymentForm.receiptNo}
+                  onChangeText={(receiptNo) =>
+                    setPaymentForm((current) => ({ ...current, receiptNo }))
+                  }
+                  placeholder={
+                    paymentForm.mode === "Cash" ||
+                    paymentForm.mode === "Cheque"
+                      ? "Next number from your receipt book"
+                      : "Leave blank to auto-generate"
+                  }
+                  autoCapitalize="characters"
+                />
                 {paymentForm.mode !== "Cash" && (
                   <>
                     <Text style={s.fieldLabel}>Transaction ID</Text>
@@ -1033,6 +1235,23 @@ function Stat({
   );
 }
 
+function FeeValue({
+  label,
+  value,
+  tone = colors.ink,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <View style={s.studentFeeValue}>
+      <Text style={s.studentFeeLabel}>{label}</Text>
+      <Text style={[s.studentFeeAmount, { color: tone }]}>{value}</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   root: {
     flex: 1,
@@ -1164,6 +1383,22 @@ const s = StyleSheet.create({
     borderTopColor: colors.border,
     paddingTop: 8,
   },
+  structureFooterActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  studentFeeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    gap: 8,
+  },
+  studentFeeValue: { flexGrow: 1, flexBasis: "45%" },
+  studentFeeLabel: { color: colors.muted, fontSize: 9 },
+  studentFeeAmount: { fontSize: 12, fontWeight: "800", marginTop: 3 },
   recordStatus: { color: colors.success, fontSize: 10, fontWeight: "800" },
   invoiceStatus: { color: colors.muted, fontSize: 10, fontWeight: "800" },
   error: {
