@@ -47,11 +47,11 @@ import type {
 
 const localApiUrl =
   Platform.OS === "android"
-    ? "https://school-management-production-e239.up.railway.app/"
-    : "https://school-management-production-e239.up.railway.app/api";
+    ? "https://zipschool-backend.onrender.com/api"
+    : "http://localhost:5000/api";
 export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
-  (__DEV__ ? localApiUrl : "https://school-management-production-e239.up.railway.app/api")
+  (__DEV__ ? localApiUrl : "https://zipschool-backend.onrender.com/api")
 ).replace(/\/+$/, "");
 export const KEYS = {
   access: "erp_access_token",
