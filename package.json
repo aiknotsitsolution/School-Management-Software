@@ -5,6 +5,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
+    "android:build": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-short.ps1 assembleDebug",
+    "android:clean": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-short.ps1 clean",
     "ios": "expo start --ios"
   },
   "dependencies": {

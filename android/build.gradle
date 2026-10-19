@@ -20,7 +20,10 @@ allprojects {
   }
 }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 3f6f386d179e6c199bcd04975732c65a6cb9d2b9
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"

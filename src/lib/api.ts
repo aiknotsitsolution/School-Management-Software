@@ -47,8 +47,13 @@ import type {
 
 const localApiUrl =
   Platform.OS === "android"
+<<<<<<< HEAD
     ? "https://school-management-production-e239.up.railway.app/api"
     : "https://school-management-production-e239.up.railway.app/api";
+=======
+    ? "https://zipschool-backend.onrender.com/api"
+    : "http://localhost:5000/api";
+>>>>>>> 3f6f386d179e6c199bcd04975732c65a6cb9d2b9
 export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
   (__DEV__ ? localApiUrl : "https://school-management-production-e239.up.railway.app/api")
