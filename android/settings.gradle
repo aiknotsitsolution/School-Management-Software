@@ -23,6 +23,14 @@ plugins {
 }
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+  def autolinkingConfigFile = new File(rootDir, "build/generated/autolinking/autolinking.json")
+  if (autolinkingConfigFile.isFile()) {
+    def cachedRoot = new groovy.json.JsonSlurper().parse(autolinkingConfigFile).root
+    if (cachedRoot != rootDir.canonicalPath) {
+      autolinkingConfigFile.delete()
+    }
+  }
+
   if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
     ex.autolinkLibrariesFromCommand()
   } else {
