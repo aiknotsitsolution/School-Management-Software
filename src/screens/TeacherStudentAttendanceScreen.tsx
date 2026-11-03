@@ -700,7 +700,7 @@ export default function TeacherStudentAttendanceScreen() {
                     : "No students are enrolled in this class and section yet."}
                 </Text>
               </Card>
-            ) : null
+            ) : undefined
           }
           renderItem={({ item }) => (
             <Card style={styles.studentCard}>
@@ -806,7 +806,7 @@ export default function TeacherStudentAttendanceScreen() {
                   )}
                 </View>
               </View>
-            ) : null
+            ) : undefined
           }
         />
       )}

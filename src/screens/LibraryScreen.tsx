@@ -1027,7 +1027,7 @@ export default function LibraryScreen() {
             ))}
             {isStudent && <Text style={s.footerNote}>Return books by the due date to avoid fines. For new issues or renewals, visit the school library.</Text>}
           </View>
-        ) : null
+        ) : undefined
       }
       refreshControl={
         <RefreshControl

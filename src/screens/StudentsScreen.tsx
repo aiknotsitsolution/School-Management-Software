@@ -695,7 +695,7 @@ export default function StudentsScreen() {
               </View>
             ) : visibleItems.length > 0 ? (
               <Text style={s.endText}>You’re viewing all matching students.</Text>
-            ) : null
+            ) : undefined
           }
         />
       )}

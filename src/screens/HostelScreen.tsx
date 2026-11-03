@@ -996,7 +996,9 @@ export default function HostelScreen() {
         visible={roomModal}
         transparent
         animationType="slide"
-        onRequestClose={() => !busy && setRoomModal(false)}
+        onRequestClose={() => {
+          if (!busy) setRoomModal(false);
+        }}
       >
         <KeyboardAvoidingView
           style={s.modalBackdrop}
@@ -1137,7 +1139,9 @@ export default function HostelScreen() {
         visible={allotModal}
         transparent
         animationType="slide"
-        onRequestClose={() => !busy && setAllotModal(false)}
+        onRequestClose={() => {
+          if (!busy) setAllotModal(false);
+        }}
       >
         <KeyboardAvoidingView
           style={s.modalBackdrop}

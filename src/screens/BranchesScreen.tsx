@@ -460,7 +460,9 @@ export default function BranchesScreen() {
         visible={Boolean(form)}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => !saving && setForm(null)}
+        onRequestClose={() => {
+          if (!saving) setForm(null);
+        }}
       >
         {form ? (
           <View style={s.modal}>

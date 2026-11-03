@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ScrollViewInstance,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../lib/api";
@@ -81,7 +82,7 @@ function Avatar({ name, role }: { name?: string; role?: string }) {
 export default function MessagesScreen() {
   const { user } = useAuth();
   const userId = String(user?.id || user?._id || "");
-  const threadScrollRef = useRef<ScrollView | null>(null);
+  const threadScrollRef = useRef<ScrollViewInstance | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

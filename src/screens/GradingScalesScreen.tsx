@@ -455,7 +455,9 @@ export default function GradingScalesScreen() {
         visible={modalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => !busy && setModalVisible(false)}
+        onRequestClose={() => {
+          if (!busy) setModalVisible(false);
+        }}
       >
         <KeyboardAvoidingView
           style={styles.modalRoot}

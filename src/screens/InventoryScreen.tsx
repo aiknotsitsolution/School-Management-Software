@@ -653,7 +653,9 @@ export default function InventoryScreen() {
         visible={modalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => !busy && setModalVisible(false)}
+        onRequestClose={() => {
+          if (!busy) setModalVisible(false);
+        }}
       >
         <KeyboardAvoidingView
           style={s.modalBackdrop}

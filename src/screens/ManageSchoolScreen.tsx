@@ -1654,7 +1654,9 @@ export default function ManageSchoolScreen() {
         visible={bulkSubjectsVisible}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => !savingBulkSubjects && setBulkSubjectsVisible(false)}
+        onRequestClose={() => {
+          if (!savingBulkSubjects) setBulkSubjectsVisible(false);
+        }}
       >
         <View style={styles.modal}>
           <View style={styles.modalHeading}>

@@ -17,21 +17,31 @@ import type { AttendanceRecord, SchoolEvent } from "../types";
 
 const INDIA_TIME_ZONE = "Asia/Kolkata";
 const MAX_ATTENDANCE_PAGES = 10;
-const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat("en-IN", {
-  month: "long",
-  year: "numeric",
-  timeZone: "UTC",
-});
-const DATE_LABEL_FORMATTER = new Intl.DateTimeFormat("en-IN", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
+let monthLabelFormatter: Intl.DateTimeFormat | undefined;
+let dateLabelFormatter: Intl.DateTimeFormat | undefined;
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type CalendarHoliday = SchoolEvent & { source?: string };
+
+function getMonthLabelFormatter() {
+  monthLabelFormatter ??= new Intl.DateTimeFormat("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return monthLabelFormatter;
+}
+
+function getDateLabelFormatter() {
+  dateLabelFormatter ??= new Intl.DateTimeFormat("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return dateLabelFormatter;
+}
 
 function dateKeyOf(value?: string) {
   const dateValue = String(value || "");
@@ -64,7 +74,7 @@ function dateKeyFromParts(year: number, month: number, day: number) {
 
 function monthLabel(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
-  return MONTH_LABEL_FORMATTER.format(
+  return getMonthLabelFormatter().format(
     new Date(Date.UTC(year, month - 1, 15, 12)),
   );
 }
@@ -73,7 +83,7 @@ function dateLabel(value?: string) {
   const key = dateKeyOf(value);
   if (!key) return "Date not available";
   const [year, month, day] = key.split("-").map(Number);
-  return DATE_LABEL_FORMATTER.format(
+  return getDateLabelFormatter().format(
     new Date(Date.UTC(year, month - 1, day, 12)),
   );
 }

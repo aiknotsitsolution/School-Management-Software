@@ -1569,7 +1569,9 @@ export default function TimetableScreen() {
         visible={Boolean(draft)}
         transparent
         animationType="slide"
-        onRequestClose={() => !saving && setDraft(null)}
+        onRequestClose={() => {
+          if (!saving) setDraft(null);
+        }}
       >
         {draft ? (
           <View style={styles.modalBackdrop}>
@@ -1767,7 +1769,9 @@ export default function TimetableScreen() {
         visible={Boolean(copySource)}
         transparent
         animationType="slide"
-        onRequestClose={() => !copyBusy && setCopySource("")}
+        onRequestClose={() => {
+          if (!copyBusy) setCopySource("");
+        }}
       >
         {copySource ? (
           <View style={styles.modalBackdrop}>
@@ -1897,9 +1901,9 @@ export default function TimetableScreen() {
         visible={Boolean(substitutionDraft)}
         transparent
         animationType="slide"
-        onRequestClose={() =>
-          !substitutionSaving && setSubstitutionDraft(null)
-        }
+        onRequestClose={() => {
+          if (!substitutionSaving) setSubstitutionDraft(null);
+        }}
       >
         {substitutionDraft ? (
           <View style={styles.modalBackdrop}>

@@ -540,7 +540,9 @@ export default function AcademicSessionsScreen() {
         visible={modalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => !busy && setModalVisible(false)}
+        onRequestClose={() => {
+          if (!busy) setModalVisible(false);
+        }}
       >
         <View style={s.modalBackdrop}>
           <View style={s.modalCard}>

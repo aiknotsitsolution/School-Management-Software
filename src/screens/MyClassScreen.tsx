@@ -445,7 +445,7 @@ export default function MyClassScreen() {
                     : "There are no students in this class and section yet."}
                 </Text>
               </Card>
-            ) : null
+            ) : undefined
           }
           renderItem={({ item }) => (
             <Pressable
