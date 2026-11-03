@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  ImageBackground,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -729,11 +729,14 @@ export default function TeacherDashboardScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
       }
     >
-      <ImageBackground
-        source={dashboardImage ? { uri: dashboardImage } : undefined}
-        imageStyle={styles.heroImage}
-        style={styles.hero}
-      >
+      <View style={styles.hero}>
+        {dashboardImage ? (
+          <Image
+            source={{ uri: dashboardImage }}
+            resizeMode="cover"
+            style={[StyleSheet.absoluteFill, styles.heroImage]}
+          />
+        ) : null}
         <View style={styles.heroOverlay}>
           <Text style={styles.eyebrow}>{greeting()}</Text>
           <Text style={styles.heroTitle}>Hello, {displayName}</Text>
@@ -751,7 +754,7 @@ export default function TeacherDashboardScreen() {
             <HeroStat label="Students" value={data.students.length} />
           </View>
         </View>
-      </ImageBackground>
+      </View>
 
       {scopes.length > 1 && (
         <Card>

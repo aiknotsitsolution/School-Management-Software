@@ -1,6 +1,5 @@
 import { fetch as streamFetch } from "expo/fetch";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
 import type {
   ApiResponse,
   AdmissionEnquiry,
@@ -45,14 +44,8 @@ import type {
   User,
 } from "../types";
 
-const localApiUrl =
-  Platform.OS === "android"
-    ? "https://school-management-production-e239.up.railway.app/api"
-    : "https://school-management-production-e239.up.railway.app/api";
-
 export const API_BASE_URL = (
-  process.env.EXPO_PUBLIC_API_URL ||
-  (__DEV__ ? localApiUrl : "https://school-management-production-e239.up.railway.app/api")
+  process.env.EXPO_PUBLIC_API_URL || "https://15.135.215.62/api"
 ).replace(/\/+$/, "");
 export const KEYS = {
   access: "erp_access_token",
@@ -132,7 +125,7 @@ async function request<T>(
     });
   } catch {
     throw new Error(
-      `Could not connect to the school server at ${API_BASE_URL}. Check your connection and API URL. On a physical device, use your computer's LAN IP in EXPO_PUBLIC_API_URL.`,
+      `Could not connect to the school server at ${API_BASE_URL}. Check your internet connection and API URL.`,
     );
   }
   if (res.status === 401 && !options._retry && !PUBLIC.includes(path)) {

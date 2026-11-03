@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  ImageBackground,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -369,15 +369,14 @@ export default function SchoolAdminDashboardScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={load} />
       }
     >
-      <ImageBackground
-        source={
-          school?.settings?.bannerImage
-            ? { uri: school.settings.bannerImage }
-            : undefined
-        }
-        style={s.hero}
-        imageStyle={s.heroImage}
-      >
+      <View style={s.hero}>
+        {school?.settings?.bannerImage ? (
+          <Image
+            source={{ uri: school.settings.bannerImage }}
+            resizeMode="cover"
+            style={[StyleSheet.absoluteFill, s.heroImage]}
+          />
+        ) : null}
         <View style={s.heroOverlay} />
         <View style={s.heroTopline}>
           <Text style={s.eyebrow}>SCHOOL ADMINISTRATION</Text>
@@ -417,7 +416,7 @@ export default function SchoolAdminDashboardScreen() {
             label="Students"
           />
         </View>
-      </ImageBackground>
+      </View>
 
       {!!error && (
         <View style={s.errorBox}>

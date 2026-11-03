@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  ImageBackground,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -63,13 +63,14 @@ export default function LoginScreen({ onForgot }: { onForgot?: () => void }) {
         contentContainerStyle={s.content}
         keyboardShouldPersistTaps="handled"
       >
-        <ImageBackground
-          source={{
-            uri: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=1200&h=700&fit=crop",
-          }}
-          imageStyle={s.heroImage}
-          style={s.hero}
-        >
+        <View style={s.hero}>
+          <Image
+            source={{
+              uri: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=1200&h=700&fit=crop",
+            }}
+            resizeMode="cover"
+            style={[StyleSheet.absoluteFill, s.heroImage]}
+          />
           <View style={s.heroShade} />
           <View style={s.brandRow}>
             <View style={s.brandMark}>
@@ -84,7 +85,7 @@ export default function LoginScreen({ onForgot }: { onForgot?: () => void }) {
             <Text style={s.eyebrow}>SCHOOL ADMINISTRATION</Text>
             <Text style={s.heroTitle}>One place for the whole school day.</Text>
           </View>
-        </ImageBackground>
+        </View>
 
         <View style={s.form}>
           <Text style={s.welcome}>Welcome back</Text>
